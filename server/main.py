@@ -7,7 +7,7 @@ def main():
     
     # Cấu hình
     JSONL_FILE = "server/travel.jsonl"
-    MODEL_NAME = "qwen2:7b"  # Các lựa chọn: llama3.2, mistral, gemma2, qwen2.5
+    MODEL_NAME = "qwen2.5:7b"  # Các lựa chọn: llama3.2, mistral, gemma2, qwen2.5
     
     try:
         # Khởi tạo
