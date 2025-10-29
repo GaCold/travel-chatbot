@@ -242,9 +242,19 @@ class AgenticRAGChatbot:
 
         # Node 1: Query hoặc Respond
         def query_or_respond(state: State):
-            """Agent quyết định retrieve hay trả lời trực tiếp"""
+            """Agent luôn retrieve thông tin từ database"""
             messages = state["messages"]
-            response = llm_with_tools.invoke(messages)
+            
+            # Tạo prompt để buộc model luôn retrieve
+            system_msg = """Bạn là agent du lịch. Nhiệm vụ của bạn là:
+1. Đọc câu hỏi người dùng
+2. TÌM KIẾM thông tin từ tool retrieve_travel_info
+3. LUÔN sử dụng tool để tìm kiếm, ngay cả khi bạn có thể biết câu trả lời
+
+Luôn gọi tool retrieve_travel_info trước khi trả lời."""
+
+            messages_with_system = [{"role": "system", "content": system_msg}] + messages
+            response = llm_with_tools.invoke(messages_with_system)
             return {"messages": [response]}
 
         # Node 2: Generate answer
@@ -252,19 +262,41 @@ class AgenticRAGChatbot:
             """Tạo câu trả lời cuối cùng dựa trên context"""
             messages = state["messages"]
 
-            # Lấy tool messages (retrieved documents)
-            tool_messages = [msg for msg in messages if hasattr(msg, "tool_calls")]
+            # Lấy tool results (retrieved documents)
+            tool_results = [
+                msg for msg in messages 
+                if hasattr(msg, "tool_call_id") and msg.type == "tool"
+            ]
 
-            # Tạo prompt với context
+            # Kiểm tra xem có dữ liệu được retrieve hay không
+            if not tool_results:
+                # Không có dữ liệu được retrieve - từ chối trả lời
+                return {
+                    "messages": [
+                        {"role": "assistant", "content": "❌ Xin lỗi, tôi không tìm thấy thông tin liên quan trong dữ liệu du lịch của mình. Vui lòng hỏi về các địa điểm tại TP.HCM hoặc các vùng miền khác ở Việt Nam."}
+                    ]
+                }
+
+            # Nếu có dữ liệu, tạo prompt bắt buộc dùng context
             system_prompt = """Bạn là trợ lý du lịch Việt Nam thông minh và nhiệt tình. 
-            
-Nhiệm vụ của bạn:
-- Cung cấp thông tin du lịch chính xác về các vùng miền Việt Nam
-- Tư vấn về địa điểm, phương tiện, ẩm thực, khách sạn
-- Đưa ra các mẹo du lịch hữu ích
-- Trả lời bằng tiếng Việt thân thiện và dễ hiểu
 
-Nếu thông tin không có trong dữ liệu, hãy nói rõ và đề xuất hướng tìm kiếm khác."""
+⚠️ HƯỚNG DẪN QUAN TRỌNG:
+- BẮT BUỘC chỉ sử dụng thông tin từ tài liệu được cung cấp (tool results)
+- KHÔNG ĐƯỢC dùng kiến thức bên ngoài hoặc tự sinh ra thông tin
+- Nếu tài liệu không đủ chi tiết, hãy nói rõ điều đó
+- Trả lời bằng tiếng Việt thân thiện và dễ hiểu
+- Luôn trích dẫn nguồn thông tin từ tài liệu
+
+Nội dung tài liệu được cung cấp:
+{tool_context}"""
+
+            # Trích xuất context từ tool results
+            tool_context = "\n\n".join([
+                f"[{i+1}] {msg.content}" 
+                for i, msg in enumerate(tool_results)
+            ])
+
+            system_prompt = system_prompt.format(tool_context=tool_context)
 
             response = self.llm.invoke(
                 [{"role": "system", "content": system_prompt}, *messages]
@@ -282,7 +314,9 @@ Nếu thông tin không có trong dữ liệu, hãy nói rõ và đề xuất h�
         # Thêm edges
         graph_builder.add_edge(START, "query_or_respond")
         graph_builder.add_conditional_edges(
-            "query_or_respond", tools_condition, {"tools": "tools", END: END}
+            "query_or_respond", 
+            tools_condition, 
+            {"tools": "tools", END: END}
         )
         graph_builder.add_edge("tools", "generate_answer")
         graph_builder.add_edge("generate_answer", END)
@@ -328,7 +362,50 @@ Nếu thông tin không có trong dữ liệu, hãy nói rõ và đề xuất h�
         # Kiểm tra và làm sạch tiếng Trung
         answer = self._clean_chinese_text(answer)
 
-        return {"answer": answer, "messages": result["messages"]}
+        # Debug: In thông tin về retrieval
+        tool_messages = [msg for msg in result["messages"] if hasattr(msg, "tool_call_id")]
+        
+        return {
+            "answer": answer, 
+            "messages": result["messages"],
+            "retrieved_docs_count": len(tool_messages)
+        }
+
+    def ask_with_history(self, question, conversation_history=None):
+        """Hỏi chatbot với lịch sử hội thoại"""
+        if not self.graph:
+            raise ValueError("Graph chưa được khởi tạo. Gọi initialize() trước.")
+
+        # Nếu không có lịch sử, tạo mới
+        if conversation_history is None:
+            conversation_history = []
+
+        # Thêm câu hỏi mới vào lịch sử
+        conversation_history.append({"role": "user", "content": question})
+
+        # Chạy graph với lịch sử
+        result = self.graph.invoke({"messages": conversation_history})
+
+        # Lấy câu trả lời
+        final_message = result["messages"][-1]
+        answer = (
+            final_message.content
+            if hasattr(final_message, "content")
+            else str(final_message)
+        )
+
+        # Làm sạch tiếng Trung
+        answer = self._clean_chinese_text(answer)
+
+        # Debug: In thông tin về retrieval
+        tool_messages = [msg for msg in result["messages"] if hasattr(msg, "tool_call_id")]
+
+        return {
+            "answer": answer, 
+            "messages": result["messages"],
+            "conversation_history": result["messages"],
+            "retrieved_docs_count": len(tool_messages)
+        }
 
     def _clean_chinese_text(self, text):
         """Loại bỏ hoặc cảnh báo nếu có tiếng Trung"""
@@ -391,7 +468,17 @@ Nếu thông tin không có trong dữ liệu, hãy nói rõ và đề xuất h�
                 # Làm sạch tiếng Trung
                 answer = self._clean_chinese_text(answer)
 
+                # Debug: Kiểm tra xem có retrieval hay không
+                tool_messages = [
+                    msg for msg in result["messages"] 
+                    if hasattr(msg, "tool_call_id") and msg.type == "tool"
+                ]
+
                 print(f"\n🤖 Bot: {answer}\n")
+                if tool_messages:
+                    print(f"ℹ️  [Đã retrieve {len(tool_messages)} tài liệu]")
+                else:
+                    print("⚠️  [⚠️  CẢNH BÁO: Không retrieve dữ liệu từ database!]")
                 print("-" * 60 + "\n")
 
                 # Cập nhật lịch sử
