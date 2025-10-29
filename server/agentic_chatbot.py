@@ -46,22 +46,39 @@ class AgenticRAGChatbot:
         documents = []
 
         print("📂 Đang đọc file JSONL...")
-        with open(self.jsonl_file_path, "r", encoding="utf-8") as f:
-            for idx, line in enumerate(f, 1):
-                if line.strip():
-                    try:
-                        data = json.loads(line)
-                        doc_type = data.get("type", "unknown")
-                        dest = data.get("destination_name", "Unknown")
+        try:
+            # First try with utf-8-sig to handle BOM
+            with open(self.jsonl_file_path, "r", encoding="utf-8-sig") as f:
+                for idx, line in enumerate(f, 1):
+                    if line.strip():
+                        try:
+                            data = json.loads(line)
+                            doc_type = data.get("type", "unknown")
+                            dest = data.get("destination_name", "Unknown")
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ Error decoding JSON on line {idx}: {e}")
+                            continue
+        except UnicodeDecodeError:
+            print("⚠️ UTF-8-sig encoding failed, trying UTF-8...")
+            # Try again with regular UTF-8
+            with open(self.jsonl_file_path, "r", encoding="utf-8") as f:
+                for idx, line in enumerate(f, 1):
+                    if line.strip():
+                        try:
+                            data = json.loads(line)
+                            doc_type = data.get("type", "unknown")
+                            dest = data.get("destination_name", "Unknown")
+                        except json.JSONDecodeError as e:
+                            print(f"⚠️ Error decoding JSON on line {idx}: {e}")
+                            continue
 
                         # Xử lý theo từng loại document
+                        content = ""
                         if doc_type == "overview":
                             content = f"📋 TỔNG QUAN - {dest}\n"
                             content += f"Mô tả: {data.get('description', '')}\n"
                             if "highlights" in data:
-                                content += (
-                                    f"Điểm nổi bật: {', '.join(data['highlights'])}\n"
-                                )
+                                content += f"Điểm nổi bật: {', '.join(data['highlights'])}\n"
                             if "best_for" in data:
                                 content += f"Phù hợp cho: {', '.join(data['best_for'])}"
 
@@ -70,9 +87,7 @@ class AgenticRAGChatbot:
                             content += f"Tháng tốt nhất: {', '.join(data.get('best_months', []))}\n"
                             content += f"Mùa khô: {data.get('dry_season', '')}\n"
                             content += f"Mùa mưa: {data.get('rainy_season', '')}\n"
-                            content += (
-                                f"Lưu ý thời tiết: {data.get('weather_note', '')}"
-                            )
+                            content += f"Lưu ý thời tiết: {data.get('weather_note', '')}"
 
                         elif doc_type == "attraction":
                             content = (
@@ -155,8 +170,16 @@ class AgenticRAGChatbot:
                             Document(page_content=content, metadata=metadata)
                         )
 
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️  Bỏ qua dòng {idx}: {e}")
+                        # Metadata
+                        metadata = {
+                            "type": doc_type,
+                            "destination": dest,
+                            "source": f"line_{idx}",
+                        }
+
+                        documents.append(
+                            Document(page_content=content, metadata=metadata)
+                        )
 
         print(f"✅ Đã tải {len(documents)} documents")
 
