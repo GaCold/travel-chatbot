@@ -17,4 +17,5 @@ pip install -r server/requirements.txt
 ```bash
 source .venv/bin/activate
 python3 server/main.py
+streamlit run ui/app.py
 ```
