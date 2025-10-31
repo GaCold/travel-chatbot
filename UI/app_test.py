@@ -50,7 +50,7 @@ def initialize_session_state():
 
     if "llm" not in st.session_state:
         llm = AgenticRAGChatbot(JSONL_FILE, MODEL_NAME)
-        llm.initialize()  # cực kỳ quan trọng, để build graph
+        llm.initialize()
         st.session_state.llm = llm
 
 def load_css():
