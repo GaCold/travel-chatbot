@@ -21,7 +21,6 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 class State(TypedDict):
     """State của graph"""
-
     messages: Annotated[list, add_messages]
 
 
@@ -42,133 +41,147 @@ class AgenticRAGChatbot:
         self.llm = None
 
     def load_jsonl_data(self):
-        """Đọc và xử lý dữ liệu JSONL du lịch"""
+        """Đọc và xử lý dữ liệu JSONL du lịch.
+
+        Thực hiện đọc với `utf-8-sig` fallback sang `utf-8`, parse từng dòng JSON
+        và chuyển thành `Document` để dùng cho vectorstore.
+        """
+        def try_open(encodings):
+            for enc in encodings:
+                try:
+                    with open(self.jsonl_file_path, "r", encoding=enc) as f:
+                        return f.read().splitlines()
+                except UnicodeDecodeError:
+                    continue
+            raise UnicodeDecodeError("utf-8", b"", 0, 1, "unable to decode with provided encodings")
+
         documents = []
-
         print("📂 Đang đọc file JSONL...")
-        with open(self.jsonl_file_path, "r", encoding="utf-8") as f:
-            for idx, line in enumerate(f, 1):
-                if line.strip():
-                    try:
-                        data = json.loads(line)
-                        doc_type = data.get("type", "unknown")
-                        dest = data.get("destination_name", "Unknown")
+        try:
+            lines = try_open(["utf-8-sig", "utf-8"])
+        except Exception as e:
+            print(f"❌ Lỗi khi đọc file: {e}")
+            return []
 
-                        # Xử lý theo từng loại document
-                        if doc_type == "overview":
-                            content = f"📋 TỔNG QUAN - {dest}\n"
-                            content += f"Mô tả: {data.get('description', '')}\n"
-                            if "highlights" in data:
-                                content += (
-                                    f"Điểm nổi bật: {', '.join(data['highlights'])}\n"
-                                )
-                            if "best_for" in data:
-                                content += f"Phù hợp cho: {', '.join(data['best_for'])}"
+        for idx, line in enumerate(lines, 1):
+            if not line or not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError as e:
+                print(f"⚠️ Error decoding JSON on line {idx}: {e}")
+                continue
 
-                        elif doc_type == "best_time":
-                            content = f"🌤️ THỜI GIAN ĐẾN - {dest}\n"
-                            content += f"Tháng tốt nhất: {', '.join(data.get('best_months', []))}\n"
-                            content += f"Mùa khô: {data.get('dry_season', '')}\n"
-                            content += f"Mùa mưa: {data.get('rainy_season', '')}\n"
-                            content += (
-                                f"Lưu ý thời tiết: {data.get('weather_note', '')}"
-                            )
+            doc_type = data.get("type", "unknown")
+            dest = data.get("destination_name") or data.get("destination") or "Unknown"
 
-                        elif doc_type == "attraction":
-                            content = (
-                                f"📍 ĐỊA ĐIỂM THAM QUAN - {data.get('name', '')}\n"
-                            )
-                            content += f"Địa điểm: {dest}\n"
-                            content += f"Loại: {data.get('category', '')}\n"
-                            content += f"Quận: {data.get('district', '')}\n"
-                            content += f"Mô tả: {data.get('description', '')}\n"
-                            content += f"Giá vé: {data.get('entry_fee', '')}\n"
-                            content += f"Giờ mở cửa: {data.get('opening_hours', '')}\n"
-                            content += f"Thời gian cần: {data.get('time_needed', '')}\n"
-                            if "tips" in data:
-                                content += f"Tips: {data['tips']}"
+            # build a short human-readable content for the Document
+            content_parts = []
+            if doc_type == "overview":
+                content_parts.append(f"📋 TỔNG QUAN - {dest}")
+                content_parts.append(data.get("description", ""))
+                if data.get("highlights"):
+                    content_parts.append("Điểm nổi bật: " + ", ".join(data["highlights"]))
+                if data.get("best_for"):
+                    content_parts.append("Phù hợp cho: " + ", ".join(data["best_for"]))
 
-                        elif doc_type == "photo_spot":
-                            content = f"📸 ĐIỂM CHECK-IN - {data.get('name', '')}\n"
-                            content += f"Địa điểm: {dest}\n"
-                            content += f"Loại: {data.get('spot_type', '')}\n"
-                            content += (
-                                f"Thời gian đẹp nhất: {data.get('best_time', '')}\n"
-                            )
-                            content += f"Góc chụp: {data.get('photo_angle', '')}\n"
-                            content += f"Phong cách: {data.get('vibe', '')}\n"
-                            if "tip" in data:
-                                content += f"Tips: {data['tip']}"
+            elif doc_type == "best_time":
+                content_parts.append(f"🌤️ THỜI GIAN ĐẾN - {dest}")
+                content_parts.append("Tháng tốt nhất: " + ", ".join(data.get("best_months", [])))
+                content_parts.append("Mùa khô: " + data.get("dry_season", ""))
+                content_parts.append("Mùa mưa: " + data.get("rainy_season", ""))
+                if data.get("weather_note"):
+                    content_parts.append("Lưu ý thời tiết: " + data.get("weather_note", ""))
 
-                        elif doc_type == "food":
-                            content = f"🍜 MÓN ĂN - {data.get('name', '')}\n"
-                            content += f"Địa điểm: {dest}\n"
-                            content += f"Mô tả: {data.get('description', '')}\n"
-                            content += f"Giá: {data.get('price_range', '')}\n"
-                            if "recommended_places" in data:
-                                content += "Quán gợi ý:\n"
-                                for place in data["recommended_places"]:
-                                    content += f"- {place.get('name', '')}: {place.get('address', '')}\n"
-                            if "tip" in data:
-                                content += f"Tips: {data['tip']}"
+            elif doc_type == "attraction":
+                content_parts.append(f"📍 ĐỊA ĐIỂM THAM QUAN - {data.get('name','')}")
+                content_parts.append(f"Địa điểm: {dest}")
+                content_parts.append(f"Loại: {data.get('category', '')}")
+                content_parts.append(f"Quận: {data.get('district', '')}")
+                content_parts.append(data.get("description", ""))
+                content_parts.append(f"Giá vé: {data.get('entry_fee', '')}")
+                content_parts.append(f"Giờ mở cửa: {data.get('opening_hours', '')}")
+                content_parts.append(f"Thời gian cần: {data.get('time_needed', '')}")
+                if data.get("tips"):
+                    content_parts.append(f"Tips: {data['tips']}")
 
-                        elif doc_type == "accommodation":
-                            content = f"🏨 NƠI LƯU TRÚ - {data.get('name', '')}\n"
-                            content += f"Địa điểm: {dest}\n"
-                            content += f"Loại: {data.get('accom_type', '')}\n"
-                            content += f"Giá: {data.get('price', data.get('price_range', ''))}\n"
-                            content += f"Địa chỉ: {data.get('address', '')}\n"
-                            if "amenities" in data:
-                                content += f"Tiện ích: {', '.join(data['amenities'])}\n"
-                            if "booking" in data:
-                                content += f"Đặt phòng: {data['booking']}"
+            elif doc_type == "photo_spot":
+                content_parts.append(f"📸 ĐIỂM CHECK-IN - {data.get('name','')}")
+                content_parts.append(f"Địa điểm: {dest}")
+                content_parts.append(f"Loại: {data.get('spot_type', '')}")
+                content_parts.append(f"Thời gian đẹp nhất: {data.get('best_time', '')}")
+                content_parts.append(f"Góc chụp: {data.get('photo_angle', '')}")
+                content_parts.append(f"Phong cách: {data.get('vibe', '')}")
+                if data.get("tip"):
+                    content_parts.append(f"Tips: {data['tip']}")
 
-                        elif doc_type == "transportation":
-                            mode = data.get("mode", "unknown")
-                            content = f"🚗 PHƯƠNG TIỆN - {mode.upper()}\n"
-                            content += f"Địa điểm: {dest}\n"
-                            for key, value in data.items():
-                                if key not in [
-                                    "type",
-                                    "destination_name",
-                                    "mode",
-                                    "tags",
-                                    "keywords",
-                                ]:
-                                    if isinstance(value, list):
-                                        content += f"{key}: {', '.join(value)}\n"
-                                    else:
-                                        content += f"{key}: {value}\n"
-
+            elif doc_type == "food":
+                content_parts.append(f"🍜 MÓN ĂN - {data.get('name','')}")
+                content_parts.append(f"Địa điểm: {dest}")
+                content_parts.append(data.get("description", ""))
+                content_parts.append(f"Giá: {data.get('price_range', '')}")
+                if data.get("recommended_places"):
+                    content_parts.append("Quán gợi ý:")
+                    for place in data.get("recommended_places", []):
+                        if isinstance(place, dict):
+                            content_parts.append(f"- {place.get('name', '')}: {place.get('address', '')}")
                         else:
-                            # Fallback cho các type khác
-                            content = json.dumps(data, ensure_ascii=False, indent=2)
+                            content_parts.append(f"- {place}")
+                if data.get("tip"):
+                    content_parts.append(f"Tips: {data['tip']}")
 
-                        # Metadata
-                        metadata = {
-                            "type": doc_type,
-                            "destination": dest,
-                            "source": f"line_{idx}",
-                        }
+            elif doc_type == "accommodation":
+                content_parts.append(f"🏨 NƠI LƯU TRÚ - {data.get('name','')}")
+                content_parts.append(f"Địa điểm: {dest}")
+                content_parts.append(f"Loại: {data.get('accom_type', '')}")
+                content_parts.append(f"Giá: {data.get('price', data.get('price_range', ''))}")
+                content_parts.append(f"Địa chỉ: {data.get('address', '')}")
+                if data.get("amenities"):
+                    content_parts.append(f"Tiện nghi: {', '.join(data['amenities'])}")
+                if data.get("tip"):
+                    content_parts.append(f"Tips: {data['tip']}")
+                if data.get("booking"):
+                    content_parts.append(f"Đặt phòng: {data['booking']}")
 
-                        documents.append(
-                            Document(page_content=content, metadata=metadata)
-                        )
+            elif doc_type == "transportation":
+                content_parts.append(f"🚗 PHƯƠNG TIỆN DI CHUYỂN - {dest}")
+                if isinstance(data.get("options"), list):
+                    for opt in data.get("options"):
+                        content_parts.append(f"\n{opt.get('type', '')}")
+                        content_parts.append(f"Giá: {opt.get('cost', '')}")
+                        content_parts.append(f"Thời gian: {opt.get('duration', '')}")
+                        if opt.get("tip"):
+                            content_parts.append(f"Tips: {opt['tip']}")
+                elif data.get("mode"):
+                    mode = data.get("mode", "unknown")
+                    content_parts.append(f"🚗 PHƯƠNG TIỆN - {mode.upper()}")
+                    for key, value in data.items():
+                        if key not in ["type", "destination_name", "mode", "tags", "keywords"]:
+                            if isinstance(value, list):
+                                content_parts.append(f"{key}: {', '.join(value)}")
+                            else:
+                                content_parts.append(f"{key}: {value}")
 
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️  Bỏ qua dòng {idx}: {e}")
+            else:
+                # fallback: stringify the object
+                content_parts.append(json.dumps(data, ensure_ascii=False))
 
-        print(f"✅ Đã tải {len(documents)} documents")
+            content = "\n".join([p for p in content_parts if p])
+            if content.strip():
+                metadata = {"type": doc_type, "destination": dest, "source": f"line_{idx}"}
+                if data.get("name"):
+                    metadata["name"] = data.get("name")
+                documents.append(Document(page_content=content, metadata=metadata))
 
-        # Thống kê
+        print(f"✅ Đã đọc thành công {len(documents)} documents")
+
+        # simple stats
         type_counts = {}
-        for doc in documents:
-            doc_type = doc.metadata.get("type", "unknown")
-            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
-
-        print(f"\n📊 Thống kê theo loại:")
-        for doc_type, count in sorted(type_counts.items()):
-            print(f"   {doc_type}: {count}")
+        for d in documents:
+            t = d.metadata.get("type", "unknown")
+            type_counts[t] = type_counts.get(t, 0) + 1
+        if type_counts:
+            print("📊 Thống kê: " + ", ".join([f"{k}:{v}" for k, v in type_counts.items()]))
 
         return documents
 
@@ -176,7 +189,7 @@ class AgenticRAGChatbot:
         """Tạo vector store và retriever tool"""
         import os
         
-        # Kiểm tra xem đã có vector store chưaaaaaa
+        # Kiểm tra xem đã có vector store chưa
         if os.path.exists("./faiss_index") and os.path.exists("./faiss_index/index.faiss"):
             print("📦 Tìm thấy vector store đã tồn tại, đang load...")
             try:
@@ -222,7 +235,7 @@ class AgenticRAGChatbot:
             model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         )
 
-        # Tạo vector store - KHÔNG CÓ persist_directory
+        # Tạo vector store
         self.vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
 
         # Lưu xuống disk
@@ -478,7 +491,7 @@ Nội dung tài liệu được cung cấp:
                 if tool_messages:
                     print(f"ℹ️  [Đã retrieve {len(tool_messages)} tài liệu]")
                 else:
-                    print("⚠️  [⚠️  CẢNH BÁO: Không retrieve dữ liệu từ database!]")
+                    print("⚠️  [CẢNH BÁO: Không retrieve dữ liệu từ database!]")
                 print("-" * 60 + "\n")
 
                 # Cập nhật lịch sử
@@ -496,7 +509,7 @@ if __name__ == "__main__":
     # Khởi tạo chatbot
     chatbot = AgenticRAGChatbot(
         jsonl_file_path="data.jsonl",
-        model_name="llama3.2",  # Hoặc: mistral, gemma2, qwen2.5
+        model_name="qwen2.5",  # Hoặc: llama3.2, mistral, gemma2
     )
 
     # Khởi tạo hệ thống
@@ -504,7 +517,7 @@ if __name__ == "__main__":
 
     # Ví dụ hỏi đáp
     print("📝 TEST:\n")
-    result = chatbot.ask("Python là gì?")
+    result = chatbot.ask("Cho tôi biết về Bến Thành Market ở TP.HCM")
     print(f"Trả lời: {result['answer']}\n")
 
     # Chế độ chat
