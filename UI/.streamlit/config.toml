@@ -1,0 +1,9 @@
+[theme]
+primaryColor = "#ff6347"  #Màu chủ đạo, ảnh hưởng nút Submit
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f0f0"
+textColor = "#000000"
+font = "sans serif"
+
+[server]
+enableStaticServing = true
