@@ -8,10 +8,11 @@ import sys
 from src.chatbot import TravelChatbot
 from src.config import Config
 
+
 def main():
     """Main function to run the travel chatbot"""
     config = Config()
-    
+
     # DEBUG: Kiểm tra cấu hình
     print("🔧 CẤU HÌNH HỆ THỐNG:")
     print(f"   LLM Model: {config.LLM_MODEL}")
@@ -25,88 +26,91 @@ def main():
         llm_model=config.LLM_MODEL,
         embedding_model_name=config.EMBEDDING_MODEL_NAME,
         embedding_model_type=config.EMBEDDING_MODEL_TYPE,
-        persist_directory=config.PERSIST_DIRECTORY
+        persist_directory=config.PERSIST_DIRECTORY,
     )
-    print(f"check chroma db path: {config.PERSIST_DIRECTORY} - {os.path.exists(config.PERSIST_DIRECTORY)}")
-    # return
-    # Setup or load vector store
+    # Setup or load Chroma vector store
     if not os.path.exists(config.PERSIST_DIRECTORY):
-        print("🔄 Đang thiết lập vector store...")
+        print("🔄 Đang thiết lập Chroma vector store...")
         chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
         print("✅ Thiết lập hoàn tất!")
     else:
-        print("📂 Đang tải vector store có sẵn...")
-        chatbot.load_existing_vector_store()
-        chatbot.check_vector_store_status()
-        # DEBUG: Kiểm tra vector store đã load
-        try:
-            info = chatbot.get_vector_store_faiss_info()
-            print("📋 Vector store info:", info)
-        except Exception as e:
-            print(f"❌ Lỗi kiểm tra vector store: {e}")
-    
-    print("\n" + "="*50)
+        print("📂 Đang tải Chroma vector store có sẵn...")
+        if chatbot.load_existing_vector_store():
+            chatbot.check_vector_store_status()
+            # Kiểm tra vector store đã load
+            try:
+                info = chatbot.get_vector_store_info()
+                print("📋 Vector store info:", info)
+            except Exception as e:
+                print(f"❌ Lỗi kiểm tra vector store: {e}")
+        else:
+            print("⚠️  Không thể load vector store, đang tạo mới...")
+            chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
+
+    print("\n" + "=" * 50)
     print("🤖 CHATBOT TƯ VẤN DU LỊCH CẦN THƠ")
-    print("="*50)
+    print("=" * 50)
     print("Gõ 'quit', 'exit' hoặc 'thoát' để dừng chương trình")
-    
+
     # Demo questions
     demo_questions = [
         "Cần Thơ có những địa điểm du lịch nào?",
         "Món ăn ngon ở Cần Thơ là gì?",
         "Lịch trình 2 ngày ở Cần Thơ như thế nào?",
-        "Địa điểm check-in đẹp ở Cần Thơ?"
+        "Địa điểm check-in đẹp ở Cần Thơ?",
     ]
-    
+
     print("\n💡 Câu hỏi gợi ý:")
     for i, question in enumerate(demo_questions, 1):
         print(f"  {i}. {question}")
-    
+
     # Chat loop
     while True:
         try:
             user_input = input("\n🙋 Bạn: ").strip()
-            
-            if user_input.lower() in ['quit', 'exit', 'thoát', 'q']:
+
+            if user_input.lower() in ["quit", "exit", "thoát", "q"]:
                 print("👋 Tạm biệt! Hẹn gặp lại!")
                 break
-                
+
             if not user_input:
                 continue
-                
+
             # Get response với loading
             print("🔍 Đang tìm kiếm thông tin...", end="", flush=True)
             result = chatbot.ask_question(user_input)
             print("\r", end="")
-            
+
             # Display response
             print(f"\n🤖 Bot: {result['answer']}")
-            
+
             # Display sources với metadata chính xác
-            if result.get('source_documents'):
+            if result.get("source_documents"):
                 print(f"\n📚 Tham khảo từ {len(result['source_documents'])} nguồn:")
-                for i, doc in enumerate(result['source_documents'], 1):
-                    metadata = doc.get('metadata', {})
-                
-                    title = metadata.get('article_title', 'N/A')
-                    topic = metadata.get('topic', '')
-                    location = metadata.get('location_city', '')
-                    
+                for i, doc in enumerate(result["source_documents"], 1):
+                    metadata = doc.get("metadata", {})
+
+                    title = metadata.get("article_title", "N/A")
+                    topic = metadata.get("topic", "")
+                    location = metadata.get("location_city", "")
+
                     source_info = f"  {i}. {title}"
                     if topic:
                         source_info += f" - {topic}"
                     if location:
                         source_info += f" [{location}]"
-                        
+
                     print(source_info)
-                    
+
         except KeyboardInterrupt:
             print("\n👋 Tạm biệt! Hẹn gặp lại!")
             break
         except Exception as e:
             print(f"\n❌ Lỗi: {e}")
             import traceback
+
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     main()

@@ -29,14 +29,18 @@ class Config:
     # Path settings
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATA_DIRECTORY = os.path.join(BASE_DIR, "data")
-    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "faiss_index")
+    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "chroma_db")  # Chuyển sang Chroma
     LOG_DIRECTORY = os.path.join(BASE_DIR, "logs")
     
     # RAG settings
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
-    SEARCH_K = 3
-
+    SEARCH_K = 5  # Tăng số lượng documents trả về
+    
+    # Chroma settings
+    CHROMA_COLLECTION_NAME = "travel_chatbot_collection"
+    CHROMA_DISTANCE_FUNCTION = "cosine"  # cosine, l2, ip
+    
     MODEL_CACHE_DIR = os.path.join(BASE_DIR, "model_cache")
     
     # Ollama settings

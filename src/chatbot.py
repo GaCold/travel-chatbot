@@ -1,9 +1,9 @@
 import os
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from langchain_community.llms import Ollama
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -12,6 +12,7 @@ from langchain_core.output_parsers import StrOutputParser
 from .data_loader import DataLoader
 from .config import Config
 from .embedding_manager import EmbeddingManager
+from .query_parser import QueryParser
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,9 @@ class TravelChatbot:
             length_function=len,
         )
         
-        # Initialize data loader
+        # Initialize data loader and query parser
         self.data_loader = DataLoader()
+        self.query_parser = QueryParser()
         
         # Setup prompt template
         self.prompt_template = PromptTemplate.from_template(
@@ -73,7 +75,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         logger.info(f"TravelChatbot initialized with LLM: {llm_model}, Embedding: {embedding_model_name}")
     
     def setup_vector_store(self, data_directory: str, persist_directory: str):
-        """Thiết lập vector store từ dữ liệu"""
+        """Thiết lập Chroma vector store từ dữ liệu với metadata filtering"""
         try:
             # Load documents
             documents = self.data_loader.load_all_data(data_directory)
@@ -82,42 +84,42 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 raise ValueError("No documents found in the data directory")
             
             logger.info(f"Total documents loaded: {len(documents)}")
-
-            self.vector_store = FAISS.from_documents(
+            
+            # Tạo Chroma vector store với metadata
+            self.vector_store = Chroma.from_documents(
                 documents=documents,
                 embedding=self.embeddings,
+                collection_name=self.config.CHROMA_COLLECTION_NAME,
+                persist_directory=persist_directory,
+                collection_metadata={"hnsw:space": self.config.CHROMA_DISTANCE_FUNCTION}
             )
-
-            self.vector_store.save_local(persist_directory)
             
-            # Create retriever
+            print(f"✅ Đã tạo Chroma vector store tại: {persist_directory}")
+            
+            # Create retriever - sẽ được custom trong ask_question với filter
             self.retriever = self.vector_store.as_retriever(
-                search_type="mmr", #"mmr",
                 search_kwargs={
                     "k": self.config.SEARCH_K,
-                    "score_threshold": 0.5,
-                    # "fetch_k": 10, 
-                    # "lambda_mult": 0.7
                 }
             )
             
-            # Test retriever ngay
+            # Test retriever
             print("🧪 Test retriever ngay sau khi tạo...")
             test_docs = self.retriever.invoke("Cần Thơ")
             print(f"✅ Retriever test: tìm thấy {len(test_docs)} documents")
             
-            # Create QA chain
+            # Create QA chain - sẽ dùng custom retrieval trong ask_question
             self.qa_chain = (
                 {
-                    "context": self.retriever, 
-                    "question": RunnablePassthrough()
+                    "context": lambda x: self._get_relevant_docs(x), 
+                    "question": lambda x: x if isinstance(x, str) else x.get("question", "")
                 }
                 | self.prompt_template
                 | self.llm
                 | StrOutputParser()
             )
             
-            logger.info("Vector store setup completed successfully")
+            logger.info("Chroma vector store setup completed successfully")
             
         except Exception as e:
             logger.error(f"Error setting up vector store: {e}")
@@ -127,38 +129,81 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             raise
 
 
+    def _get_relevant_docs(self, question: str, filters: Optional[Dict] = None):
+        """
+        Lấy documents liên quan với metadata filtering
+        
+        Args:
+            question: Câu hỏi từ người dùng
+            filters: Dict filters cho Chroma (ví dụ: {"region": "miền bắc"})
+        """
+        if not self.vector_store:
+            return []
+        
+        # Parse query để trích xuất metadata
+        parsed = self.query_parser.parse_query(question)
+        
+        # Build filter từ parsed query
+        where_filter = None
+        if parsed["filters"]:
+            where_filter = parsed["filters"]
+            print(f"🎯 Applying filters: {where_filter}")
+        
+        # Tìm kiếm với filter
+        if where_filter:
+            docs = self.vector_store.similarity_search(
+                query=question,
+                k=self.config.SEARCH_K,
+                filter=where_filter
+            )
+        else:
+            docs = self.vector_store.similarity_search(
+                query=question,
+                k=self.config.SEARCH_K
+            )
+        
+        return docs
+
     def ask_question(self, question: str) -> Dict[str, Any]:
-        """Hỏi câu hỏi và nhận câu trả lời"""
-        if not self.qa_chain:
+        """Hỏi câu hỏi và nhận câu trả lời với metadata filtering"""
+        if not self.vector_store:
             raise ValueError("Vector store chưa được khởi tạo. Hãy gọi setup_vector_store() trước.")
         
         try:
             logger.info(f"Processing question: {question}")
+            print(f"🔍 Đang tìm kiếm với câu hỏi: '{question}'")
             
-            # DEBUG: Kiểm tra retriever
-            print(f"🔍 DEBUG: Đang tìm kiếm với câu hỏi: '{question}'")
+            # Parse query để detect metadata
+            parsed_query = self.query_parser.parse_query(question)
+            print(f"� Parsed query: region={parsed_query.get('region')}, type={parsed_query.get('type')}")
             
-            # Lấy các document liên quan
-            relevant_docs = self.retriever.invoke(question)
+            # Lấy các document liên quan với filter
+            relevant_docs = self._get_relevant_docs(question, parsed_query.get("filters"))
             print(f"   Found {len(relevant_docs)} relevant document(s)")
             
             # DEBUG: Hiển thị nội dung các document tìm được
             for i, doc in enumerate(relevant_docs):
                 print(f"📄 Document {i+1}:")
                 print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
+                print(f"   Region: {doc.metadata.get('region', 'N/A')}")
                 print(f"   Type: {doc.metadata.get('type', 'N/A')}")
-                print(f"   topic: {doc.metadata.get('topic')[:100]}")
+                print(f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}")
                 print()
             
             # Nếu không có document liên quan
             if not relevant_docs:
-                print("❌ DEBUG: Không tìm thấy document nào liên quan")
+                print("❌ Không tìm thấy document nào liên quan")
                 return {
                     "answer": "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm.",
                     "source_documents": []
                 }
-            # Chạy QA chain
-            answer = self.qa_chain.invoke(question)
+            
+            # Tạo context từ relevant docs
+            context = "\n\n".join([doc.page_content for doc in relevant_docs])
+            
+            # Chạy LLM với context và question
+            prompt = self.prompt_template.format(context=context, question=question)
+            answer = self.llm.invoke(prompt)
             
             # Kiểm tra câu trả lời
             if not answer or "Hiện tại chưa có đủ dữ liệu" in answer:
@@ -179,148 +224,142 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             }
         except Exception as e:
             logger.error(f"Error processing question: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "answer": f"Có lỗi xảy ra khi xử lý câu hỏi: {str(e)}",
                 "source_documents": []
             }
         
-    def load_existing_vector_faiss_store(self):
-        """Tải vector store đã tồn tại từ FAISS index"""
+    def load_existing_vector_store(self):
+        """Tải Chroma vector store đã tồn tại"""
         try:
-            # Kiểm tra xem FAISS index có tồn tại không
-            index_path = "./faiss_vietnamese_index"
-            if not os.path.exists(index_path):
-                print("❌ Không tìm thấy FAISS index. Cần tạo mới vector store.")
+            persist_directory = self.config.PERSIST_DIRECTORY
+            
+            if not os.path.exists(persist_directory):
+                print(f"❌ Không tìm thấy Chroma DB tại: {persist_directory}")
                 return False
             
-            # Kiểm tra các file cần thiết
-            required_files = ['index.faiss', 'index.pkl']
-            for file in required_files:
-                if not os.path.exists(os.path.join(index_path, file)):
-                    print(f"❌ Thiếu file {file} trong FAISS index")
-                    return False
+            print(f"🔄 Đang tải Chroma vector store từ: {persist_directory}")
             
-            print("🔄 Đang tải FAISS vector store từ index...")
-            
-            # Tải FAISS index
-            self.vector_store = FAISS.load_local(
-                folder_path=index_path,
-                embeddings=self.embeddings,
-                allow_dangerous_deserialization=True  # Quan trọng với FAISS
+            # Tải Chroma vector store
+            self.vector_store = Chroma(
+                collection_name=self.config.CHROMA_COLLECTION_NAME,
+                embedding_function=self.embeddings,
+                persist_directory=persist_directory
             )
             
-            # Tạo lại retriever và QA chain
+            # Tạo lại retriever
             self.retriever = self.vector_store.as_retriever(
-                search_type="mmr",
                 search_kwargs={
                     "k": self.config.SEARCH_K,
-                    "score_threshold": 0.5,
                 }
             )
             
+            # Tạo lại QA chain
             self.qa_chain = (
                 {
-                    "context": self.retriever, 
-                    "question": RunnablePassthrough()
+                    "context": lambda x: self._get_relevant_docs(x), 
+                    "question": lambda x: x if isinstance(x, str) else x.get("question", "")
                 }
                 | self.prompt_template
                 | self.llm
                 | StrOutputParser()
             )
             
-            print("✅ Đã tải thành công FAISS vector store từ index")
+            print("✅ Đã tải thành công Chroma vector store")
             return True
             
         except Exception as e:
-            print(f"❌ Lỗi khi tải FAISS vector store: {e}")
+            print(f"❌ Lỗi khi tải Chroma vector store: {e}")
             import traceback
             traceback.print_exc()
             return False
         
-    def check_vector_store_faiss_status(self):
-            """Kiểm tra trạng thái của vector store"""
-            try:
-                if not self.vector_store:
-                    print("❌ Vector store: Chưa được khởi tạo")
-                    return False
-                
-                # Kiểm tra FAISS index
-                index_path = "./faiss_vietnamese_index"
-                
-                print("🔍 Kiểm tra trạng thái vector store...")
-                
-                # Kiểm tra file tồn tại
-                if os.path.exists(index_path):
-                    faiss_files = os.listdir(index_path)
-                    print(f"📁 FAISS index files: {faiss_files}")
-                else:
-                    print("📁 FAISS index: Không tồn tại")
-                    return False
-                
-                # Thử tìm kiếm test để kiểm tra hoạt động
-                print("🧪 Test tìm kiếm với từ khóa 'du lịch'...")
-                test_results = self.vector_store.similarity_search("du lịch", k=1)
-                
-                if test_results:
-                    print(f"✅ Vector store hoạt động tốt - Tìm thấy {len(test_results)} kết quả test")
-                    print(f"📄 Document test: {test_results[0].page_content[:100]}...")
-                else:
-                    print("⚠️ Vector store hoạt động nhưng không tìm thấy kết quả test")
-                
-                # Kiểm tra số lượng documents (ước lượng)
-                try:
-                    # FAISS không có method count() trực tiếp, dùng ước lượng
-                    test_count = self.vector_store.similarity_search("test", k=100)
-                    print(f"📊 Số documents ước lượng: >={len(test_count)}")
-                except:
-                    print("📊 Không thể ước lượng số documents")
-                
-                # Kiểm tra retriever
-                if hasattr(self, 'retriever') and self.retriever:
-                    retriever_test = self.retriever.invoke("test")
-                    print(f"🔍 Retriever hoạt động - tìm thấy {len(retriever_test)} documents")
-                else:
-                    print("❌ Retriever chưa được khởi tạo")
-                
-                # Kiểm tra QA chain
-                if hasattr(self, 'qa_chain') and self.qa_chain:
-                    print("✅ QA chain đã sẵn sàng")
-                else:
-                    print("❌ QA chain chưa được khởi tạo")
-                
-                return True
-                
-            except Exception as e:
-                print(f"❌ Lỗi khi kiểm tra vector store: {e}")
-                import traceback
-                traceback.print_exc()
+    def check_vector_store_status(self):
+        """Kiểm tra trạng thái của Chroma vector store"""
+        try:
+            if not self.vector_store:
+                print("❌ Vector store: Chưa được khởi tạo")
                 return False
+            
+            persist_directory = self.config.PERSIST_DIRECTORY
+            
+            print("🔍 Kiểm tra trạng thái Chroma vector store...")
+            
+            # Kiểm tra thư mục tồn tại
+            if os.path.exists(persist_directory):
+                print(f"📁 Chroma DB directory: {persist_directory}")
+            else:
+                print(f"📁 Chroma DB: Không tồn tại tại {persist_directory}")
+                return False
+            
+            # Thử tìm kiếm test để kiểm tra hoạt động
+            print("🧪 Test tìm kiếm với từ khóa 'du lịch'...")
+            test_results = self.vector_store.similarity_search("du lịch", k=1)
+            
+            if test_results:
+                print(f"✅ Vector store hoạt động tốt - Tìm thấy {len(test_results)} kết quả test")
+                print(f"📄 Document test: {test_results[0].page_content[:100]}...")
+            else:
+                print("⚠️ Vector store hoạt động nhưng không tìm thấy kết quả test")
+            
+            # Kiểm tra số lượng documents
+            try:
+                collection = self.vector_store._collection
+                count = collection.count()
+                print(f"📊 Tổng số documents trong collection: {count}")
+            except:
+                print("📊 Không thể đếm số documents")
+            
+            # Kiểm tra retriever
+            if hasattr(self, 'retriever') and self.retriever:
+                retriever_test = self.retriever.invoke("test")
+                print(f"🔍 Retriever hoạt động - tìm thấy {len(retriever_test)} documents")
+            else:
+                print("❌ Retriever chưa được khởi tạo")
+            
+            # Kiểm tra QA chain
+            if hasattr(self, 'qa_chain') and self.qa_chain:
+                print("✅ QA chain đã sẵn sàng")
+            else:
+                print("❌ QA chain chưa được khởi tạo")
+            
+            return True
+                
+        except Exception as e:
+            print(f"❌ Lỗi khi kiểm tra vector store: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     
-    def get_vector_store_faiss_info(self):
-        """Lấy thông tin chi tiết về vector store"""
+    def get_vector_store_info(self):
+        """Lấy thông tin chi tiết về Chroma vector store"""
         try:
             if not self.vector_store:
                 return {"status": "not_initialized"}
             
+            persist_directory = self.config.PERSIST_DIRECTORY
+            
             info = {
                 "status": "active",
-                "type": "FAISS",
-                "index_path": "./faiss_vietnamese_index",
-                "index_exists": os.path.exists("./faiss_vietnamese_index")
+                "type": "Chroma",
+                "persist_directory": persist_directory,
+                "exists": os.path.exists(persist_directory)
             }
             
-            # Kiểm tra files
-            if info["index_exists"]:
-                files = os.listdir("./faiss_vietnamese_index")
-                info["files"] = files
-                info["file_count"] = len(files)
-            
-            # Ước lượng số documents
+            # Đếm số documents
             try:
-                test_docs = self.vector_store.similarity_search("test", k=100)
-                info["estimated_documents"] = f">={len(test_docs)}"
+                collection = self.vector_store._collection
+                info["document_count"] = collection.count()
             except:
-                info["estimated_documents"] = "unknown"
+                info["document_count"] = "unknown"
+            
+            # Collection info
+            try:
+                info["collection_name"] = self.config.CHROMA_COLLECTION_NAME
+            except:
+                pass
             
             return info
             
