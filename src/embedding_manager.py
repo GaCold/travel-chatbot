@@ -1,6 +1,5 @@
 import os
 from langchain_community.embeddings import OllamaEmbeddings, HuggingFaceEmbeddings
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from .config import Config, EmbeddingModelType
 import logging
 

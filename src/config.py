@@ -19,7 +19,8 @@ class Config:
     # HuggingFace model names
     VIETNAMESE_EMBEDDING_MODELS = {
         "vietnamese_v2": "AITeamVN/Vietnamese_Embedding_v2",
-        "vietnamese_bi_encoder": "keepitreal/vietnamese-bi-encoder"
+        "vietnamese_bi_encoder": "keepitreal/vietnamese-bi-encoder",
+        "sentence-transformers": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     }
 
     # HuggingFace settings
@@ -28,7 +29,7 @@ class Config:
     # Path settings
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATA_DIRECTORY = os.path.join(BASE_DIR, "data")
-    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "chroma_db")
+    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "faiss_vietnamese_index")
     LOG_DIRECTORY = os.path.join(BASE_DIR, "logs")
     
     # RAG settings

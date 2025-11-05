@@ -40,8 +40,8 @@ def main():
         chatbot.check_vector_store_status()
         # DEBUG: Kiểm tra vector store đã load
         try:
-            doc_count = chatbot.vector_store._collection.count()
-            print(f"✅ Vector store được tải với {doc_count} documents")
+            info = chatbot.get_vector_store_faiss_info()
+            print("📋 Vector store info:", info)
         except Exception as e:
             print(f"❌ Lỗi kiểm tra vector store: {e}")
     
@@ -67,26 +67,37 @@ def main():
         try:
             user_input = input("\n🙋 Bạn: ").strip()
             
-            if user_input.lower() in ['quit', 'exit', 'thoát']:
+            if user_input.lower() in ['quit', 'exit', 'thoát', 'q']:
                 print("👋 Tạm biệt! Hẹn gặp lại!")
                 break
                 
             if not user_input:
                 continue
                 
-            # Get response
+            # Get response với loading
+            print("🔍 Đang tìm kiếm thông tin...", end="", flush=True)
             result = chatbot.ask_question(user_input)
+            print("\r", end="")
             
             # Display response
             print(f"\n🤖 Bot: {result['answer']}")
             
-            # Display sources if available
+            # Display sources với metadata chính xác
             if result.get('source_documents'):
                 print(f"\n📚 Tham khảo từ {len(result['source_documents'])} nguồn:")
                 for i, doc in enumerate(result['source_documents'], 1):
-                    source_info = f"  {i}. {doc['metadata'].get('title', 'N/A')}"
-                    if doc['metadata'].get('type'):
-                        source_info += f" ({doc['metadata']['type']})"
+                    metadata = doc.get('metadata', {})
+                
+                    title = metadata.get('article_title', 'N/A')
+                    topic = metadata.get('topic', '')
+                    location = metadata.get('location_city', '')
+                    
+                    source_info = f"  {i}. {title}"
+                    if topic:
+                        source_info += f" - {topic}"
+                    if location:
+                        source_info += f" [{location}]"
+                        
                     print(source_info)
                     
         except KeyboardInterrupt:
@@ -94,6 +105,8 @@ def main():
             break
         except Exception as e:
             print(f"\n❌ Lỗi: {e}")
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()
