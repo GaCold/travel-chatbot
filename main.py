@@ -32,7 +32,7 @@ def main():
     # Setup or load vector store
     if not os.path.exists(config.PERSIST_DIRECTORY):
         print("🔄 Đang thiết lập vector store...")
-        chatbot.setup_vector_store(config.DATA_DIRECTORY)
+        chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
         print("✅ Thiết lập hoàn tất!")
     else:
         print("📂 Đang tải vector store có sẵn...")

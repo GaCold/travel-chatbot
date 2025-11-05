@@ -29,7 +29,7 @@ class Config:
     # Path settings
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATA_DIRECTORY = os.path.join(BASE_DIR, "data")
-    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "faiss_vietnamese_index")
+    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "faiss_index")
     LOG_DIRECTORY = os.path.join(BASE_DIR, "logs")
     
     # RAG settings

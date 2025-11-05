@@ -72,7 +72,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         
         logger.info(f"TravelChatbot initialized with LLM: {llm_model}, Embedding: {embedding_model_name}")
     
-    def setup_vector_store(self, data_directory: str):
+    def setup_vector_store(self, data_directory: str, persist_directory: str):
         """Thiết lập vector store từ dữ liệu"""
         try:
             # Load documents
@@ -88,7 +88,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 embedding=self.embeddings,
             )
 
-            self.vector_store.save_local("./faiss_vietnamese_index")
+            self.vector_store.save_local(persist_directory)
             
             # Create retriever
             self.retriever = self.vector_store.as_retriever(
