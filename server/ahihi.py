@@ -1,4 +1,4 @@
-import os #thao tác file + folder
+import os #thao tác file + folderr
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS #lưu truy vấn vào vector
@@ -66,4 +66,5 @@ if st.button("Xóa"):
     st.session_state['vectorstore'] = None
     del_vectordb(vector_space_dir)
     st.success('Đã xóa lịch sử hội thoại!')
+
     st.rerun()
