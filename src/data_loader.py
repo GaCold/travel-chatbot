@@ -92,12 +92,10 @@ class DataLoader:
         """
         Làm sạch metadata để tương thích với Chroma.
         Chroma chỉ chấp nhận: str, int, float, bool, None
-
-        Args:
-            metadata: Dict metadata gốc
-
-        Returns:
-            Dict metadata đã làm sạch
+        
+        Phiên bản này tối ưu cách xử lý list:
+        - List các giá trị đơn (str, int...) sẽ được nối (join).
+        - List các giá trị phức tạp (dict...) sẽ được chuyển thành chuỗi JSON.
         """
         cleaned = {}
 
@@ -108,16 +106,27 @@ class DataLoader:
                 # Giữ nguyên các kiểu hợp lệ
                 cleaned[key] = value
             elif isinstance(value, list):
-                # Chuyển list thành string (nối bằng dấu phẩy)
-                if value:
-                    # Lọc bỏ None và chuyển tất cả thành string
-                    str_items = [str(item) for item in value if item is not None]
-                    cleaned[key] = ", ".join(str_items) if str_items else ""
-                else:
+                if not value:
                     cleaned[key] = ""
+                # Kiểm tra xem list này chứa giá trị đơn hay phức tạp
+                elif all(isinstance(item, (str, int, float, bool, type(None))) for item in value):
+                    # List các giá trị đơn (ví dụ: "alias": ["a", "b"])
+                    str_items = [str(item) for item in value if item is not None]
+                    cleaned[key] = ", ".join(str_items)
+                else:
+                    # List các giá trị phức tạp (ví dụ: "images": [{"src":...}])
+                    # Chuyển cả list thành một chuỗi JSON
+                    try:
+                        cleaned[key] = json.dumps(value, ensure_ascii=False)
+                    except TypeError:
+                        # Fallback nếu có lỗi serialization
+                        cleaned[key] = str(value)
             elif isinstance(value, dict):
                 # Chuyển dict thành JSON string
-                cleaned[key] = json.dumps(value, ensure_ascii=False)
+                try:
+                    cleaned[key] = json.dumps(value, ensure_ascii=False)
+                except TypeError:
+                    cleaned[key] = str(value)
             else:
                 # Các kiểu khác: chuyển thành string
                 cleaned[key] = str(value)

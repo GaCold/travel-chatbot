@@ -58,17 +58,22 @@ class TravelChatbot:
 Bạn là trợ lý tư vấn du lịch hỗ trợ tư vấn lịch trình cũng như những địa diểm checkin nổi tiếng thuộc những địa điểm du lịch ở Việt Nam. 
 HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 
-1. CHỈ trả lời câu hỏi dựa trên thông tin được cung cấp trong context bên dưới
-2. KHÔNG sử dụng kiến thức ngoài hay tự suy luận
-3. Nếu KHÔNG có thông tin liên quan trong context, hãy trả lời: "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm."
+1. CHỈ trả lời câu hỏi dựa trên thông tin được cung cấp trong context bên dưới.
+2. KHÔNG sử dụng kiến thức ngoài hay tự suy luận.
+
+**QUY TẮC NGOẠI LỆ (TỔNG HỢP LỊCH TRÌNH):**
+3. Nếu người dùng hỏi về "lịch trình" (ví dụ: "lịch trình 2 ngày", "kế hoạch đi chơi") VÀ context KHÔNG cung cấp lịch trình cụ thể, NHƯNG context CÓ cung cấp các địa điểm tham quan (attraction), ăn uống (food), hoặc hướng dẫn (guide) tại địa điểm đó:
+    * HÃY TỰ TỔNG HỢP một lịch trình gợi ý logic (ví dụ: Ngày 1 Sáng - Chiều, Ngày 2 Sáng - Chiều).
+    * Lịch trình này PHẢI CHỈ SỬ DỤNG các địa điểm, món ăn được đề cập trong context.
+    * KHÔNG ĐƯỢC bịa thêm địa điểm, món ăn không có trong context.
+    * Bắt đầu câu trả lời bằng: "Dạ, hiện tại tôi chưa có lịch trình cụ thể cho địa điểm này, tuy nhiên dựa trên các địa điểm tham quan và ẩm thực nổi bật, tôi có thể gợi ý cho bạn một lịch trình như sau:"
+
+4. Nếu KHÔNG có thông tin liên quan trong context (context rỗng), hãy trả lời: "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm."
 
 Trả lời với giọng điệu nhẹ nhàng, như là một tư vấn du lịch thân thiện và am hiểu về các địa điểm du lịch ở Việt Nam.
 
-
 Context: {context}
-
 Câu hỏi: {question}
-
 Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         )
         
@@ -98,8 +103,11 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             
             # Create retriever - sẽ được custom trong ask_question với filter
             self.retriever = self.vector_store.as_retriever(
+                search_type="mmr",
                 search_kwargs={
-                    "k": self.config.SEARCH_K,
+                    "k": self.config.SEARCH_K, # Số lượng doc trả về (ví dụ: 4)
+                    "fetch_k": 20,              # Lấy 20 doc, sau đó MMR chọn 4 doc đa dạng nhất
+                    "lambda_mult": 0.6          # 0.5 = cân bằng, > 0.5 = ưu tiên đa dạng (diversity)
                 }
             )
             
@@ -129,39 +137,74 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             raise
 
 
-    def _get_relevant_docs(self, question: str, filters: Optional[Dict] = None):
+    def _get_relevant_docs(self, question: str):
         """
-        Lấy documents liên quan với metadata filtering
-        
-        Args:
-            question: Câu hỏi từ người dùng
-            filters: Dict filters cho Chroma (ví dụ: {"region": "miền bắc"})
+        Lấy documents liên quan với CHIẾN LƯỢC LỌC DỰ PHÒNG (Fallback Filtering).
         """
         if not self.vector_store:
             return []
-        
-        # Parse query để trích xuất metadata
+
         parsed = self.query_parser.parse_query(question)
+        docs = []
+
+        # --- NỖ LỰC 1: LỌC CHÍNH XÁC (Địa điểm + Loại) ---
+        strict_filter = self.query_parser.build_filter_dict(parsed)
         
-        # Build filter từ parsed query
-        where_filter = None
-        if parsed["filters"]:
-            where_filter = parsed["filters"]
-            print(f"🎯 Applying filters: {where_filter}")
-        
-        # Tìm kiếm với filter
-        if where_filter:
-            docs = self.vector_store.similarity_search(
-                query=question,
-                k=self.config.SEARCH_K,
-                filter=where_filter
+        if strict_filter:
+            print(f"🎯 Nỗ lực 1 (Lọc chính xác): {strict_filter}")
+            # Dùng .as_retriever() để lọc, đây là cách chuẩn
+            strict_retriever = self.vector_store.as_retriever(
+                search_type="similarity", # Dùng similarity search chuẩn
+                search_kwargs={
+                    "k": self.config.SEARCH_K,
+                    "filter": strict_filter
+                }
             )
-        else:
-            docs = self.vector_store.similarity_search(
-                query=question,
-                k=self.config.SEARCH_K
-            )
+            docs = strict_retriever.invoke(question)
         
+        # --- NỖ LỰC 2: LỌC DỰ PHÒNG (Chỉ lọc địa điểm, dùng MMR) ---
+        # Điều kiện: (Lọc 1 không thấy) VÀ (câu hỏi có 'type' (ý định) rõ ràng, ví dụ "lịch trình", "ăn gì")
+        if not docs and parsed.get("type"):
+            print(f"   ...Không tìm thấy. Chuyển sang Nỗ lực 2 (Lọc dự phòng).")
+            
+            # Tạo bộ lọc dự phòng (chỉ giữ lại địa điểm)
+            fallback_filters = parsed.get("filters", {}).copy()
+            fallback_filters.pop("type", None) # Bỏ lọc 'type'
+            # (Chúng ta cũng có thể bỏ các filter khác nếu muốn, ví dụ: duration)
+            # fallback_filters.pop("duration", None) 
+
+            fallback_where_clause = {}
+            if fallback_filters:
+                # Xây dựng lại filter CHỈ CÒN ĐỊA ĐIỂM
+                temp_parsed = {"filters": fallback_filters}
+                fallback_where_clause = self.query_parser.build_filter_dict(temp_parsed)
+
+            if fallback_where_clause:
+                print(f"🎯 Nỗ lực 2 (Chỉ lọc địa điểm, dùng MMR): {fallback_where_clause}")
+                
+                # === ĐÂY LÀ PHẦN SỬA LỖI ===
+                # Lỗi TypeError là do similarity_search() không nhận 'search_type'.
+                # Chúng ta PHẢI tạo một retriever mới với as_retriever()
+                fallback_retriever_mmr = self.vector_store.as_retriever(
+                    search_type="mmr", # Sử dụng MMR
+                    search_kwargs={
+                        "k": self.config.SEARCH_K,
+                        "fetch_k": 20,
+                        "lambda_mult": 0.7, # Ưu tiên sự đa dạng
+                        "filter": fallback_where_clause # Áp dụng filter địa điểm
+                    }
+                )
+                docs = fallback_retriever_mmr.invoke(question)
+                # === KẾT THÚC SỬA LỖI ===
+            else:
+                # Nếu câu hỏi là "lịch trình" (ko có địa điểm) -> tìm kiếm bth
+                docs = self.retriever.invoke(question) # Dùng retriever MMR mặc định (đã setup trong __init__)
+        
+        # Nếu không có filter nào ngay từ đầu (ví dụ: câu hỏi "chào bạn")
+        elif not docs and not strict_filter:
+             print(f"🎯 Nỗ lực 1 (Không có filter): Tìm kiếm cơ bản (dùng MMR).")
+             docs = self.retriever.invoke(question) # Dùng retriever MMR mặc định
+
         return docs
 
     def ask_question(self, question: str) -> Dict[str, Any]:
@@ -175,10 +218,18 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             
             # Parse query để detect metadata
             parsed_query = self.query_parser.parse_query(question)
-            print(f"� Parsed query: region={parsed_query.get('region')}, type={parsed_query.get('type')}")
+            
+            # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
+            print(f"⚙️  Parsed query: "
+                  f"region={parsed_query.get('region')}, "
+                  f"type={parsed_query.get('type')}, "
+                  f"city={parsed_query.get('location_city')}, "
+                  f"specific={parsed_query.get('location_specific')}")
+            # === KẾT THÚC THAY ĐỔI ===
             
             # Lấy các document liên quan với filter
-            relevant_docs = self._get_relevant_docs(question, parsed_query.get("filters"))
+            # Hàm _get_relevant_docs và build_filter_dict (đã sửa ở parser) sẽ tự động xử lý
+            relevant_docs = self._get_relevant_docs(question) # Chỉ cần truyền question
             print(f"   Found {len(relevant_docs)} relevant document(s)")
             
             # DEBUG: Hiển thị nội dung các document tìm được
@@ -187,8 +238,13 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
                 print(f"   Region: {doc.metadata.get('region', 'N/A')}")
                 print(f"   Type: {doc.metadata.get('type', 'N/A')}")
+                # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
+                print(f"   Location: {doc.metadata.get('location_city', 'N/A')} / {doc.metadata.get('location_specific', 'N/A')}")
+                # === KẾT THÚC THAY ĐỔI ===
                 print(f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}")
                 print()
+            
+            # ... (Phần còn lại của hàm giữ nguyên) ...
             
             # Nếu không có document liên quan
             if not relevant_docs:
@@ -203,7 +259,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             
             # Chạy LLM với context và question
             prompt = self.prompt_template.format(context=context, question=question)
-            answer = self.llm.invoke(prompt)
+            answer = "okie" #self.llm.invoke(prompt)
             
             # Kiểm tra câu trả lời
             if not answer or "Hiện tại chưa có đủ dữ liệu" in answer:
@@ -230,7 +286,6 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 "answer": f"Có lỗi xảy ra khi xử lý câu hỏi: {str(e)}",
                 "source_documents": []
             }
-        
     def load_existing_vector_store(self):
         """Tải Chroma vector store đã tồn tại"""
         try:
@@ -251,8 +306,11 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             
             # Tạo lại retriever
             self.retriever = self.vector_store.as_retriever(
+                search_type="mmr",
                 search_kwargs={
                     "k": self.config.SEARCH_K,
+                    "fetch_k": 20,
+                    "lambda_mult": 0.6
                 }
             )
             
