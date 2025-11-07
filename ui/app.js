@@ -186,7 +186,12 @@ function addMessage(text, sender, animated = false) {
         bubbleDiv.textContent = '';
         typeText(bubbleDiv, text);
     } else {
-        bubbleDiv.textContent = text;
+        // Parse and render markdown for bot messages
+        if (sender === 'bot') {
+            bubbleDiv.innerHTML = parseMarkdown(text);
+        } else {
+            bubbleDiv.textContent = text;
+        }
     }
 
     const timeDiv = document.createElement('div');
@@ -200,9 +205,42 @@ function addMessage(text, sender, animated = false) {
     messageDiv.appendChild(contentDiv);
 
     elements.messagesArea.appendChild(messageDiv);
+    
+    // Add smooth appearance
+    messageDiv.style.opacity = '0';
+    messageDiv.style.transform = 'translateY(10px)';
+    messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    
+    setTimeout(() => {
+        messageDiv.style.opacity = '1';
+        messageDiv.style.transform = 'translateY(0)';
+    }, 10);
+    
     scrollToBottom();
 
     return messageDiv;
+}
+
+function parseMarkdown(text) {
+    if (!text) return '';
+    
+    return text
+        // Code blocks with backticks
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        // Inline code with single backticks
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Bold with ** or __
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+        // Italic with * or _
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/_(.*?)_/g, '<em>$1</em>')
+        // Line breaks
+        .replace(/\n/g, '<br>')
+        // Lists (basic support)
+        .replace(/^\s*[\-\*]\s+(.+)$/gm, '<li>$1</li>')
+        // Convert li groups to ul
+        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 }
 
 // Typing animation effect
@@ -266,7 +304,7 @@ function transformTypingToMessage(text) {
 
     if (!typingContainer || !bubbleContent) {
         // Fallback if typing indicator doesn't exist
-        addMessage(text, 'bot', true);
+        addMessage(text, 'bot', false); // Changed to false to show immediately
         return;
     }
 
@@ -276,18 +314,29 @@ function transformTypingToMessage(text) {
     // Remove typing-bubble class
     bubbleContent.classList.remove('typing-bubble');
 
+    // Parse and render markdown content
+    const formattedText = parseMarkdown(text);
+    bubbleContent.innerHTML = formattedText;
+
     // Add timestamp
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
     timeDiv.textContent = formatTime(new Date());
     typingContainer.querySelector('.message-content').appendChild(timeDiv);
 
-    // Type out the text
-    typeText(bubbleContent, text);
-
     // Remove the ID so it won't be reused
     typingContainer.removeAttribute('id');
     bubbleContent.removeAttribute('id');
+    
+    // Add smooth fade-in effect
+    bubbleContent.style.opacity = '0';
+    bubbleContent.style.transition = 'opacity 0.3s ease-in-out';
+    
+    setTimeout(() => {
+        bubbleContent.style.opacity = '1';
+    }, 10);
+
+    scrollToBottom();
 }
 
 function scrollToBottom() {
