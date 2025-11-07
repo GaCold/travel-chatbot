@@ -18,7 +18,7 @@ from src.config import Config
 
 
 app = FastAPI(title="Travel Chatbot API", version="1.0.0")
-
+# chatbot = None
 
 # Serve static files from ui directory
 ui_path = Path("ui")
@@ -28,6 +28,18 @@ if ui_path.exists():
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+        config = Config()
+        global chatbot
+        chatbot = TravelChatbot(
+            llm_model=config.LLM_MODEL,
+            embedding_model_name=config.EMBEDDING_MODEL_NAME,
+            embedding_model_type=config.EMBEDDING_MODEL_TYPE,
+            persist_directory=config.PERSIST_DIRECTORY,
+        )
+        if not os.path.exists(config.PERSIST_DIRECTORY):
+            chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
+        else:
+            chatbot.load_existing_vector_store()
 
 
     async def connect(self, websocket: WebSocket):
@@ -52,16 +64,7 @@ async def health_check():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     config = Config()
-    chatbot = TravelChatbot(
-        llm_model=config.LLM_MODEL,
-        embedding_model_name=config.EMBEDDING_MODEL_NAME,
-        embedding_model_type=config.EMBEDDING_MODEL_TYPE,
-        persist_directory=config.PERSIST_DIRECTORY,
-    )
-    if not os.path.exists(config.PERSIST_DIRECTORY):
-        chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
-    else:
-        chatbot.load_existing_vector_store()
+    
 
     while True:
         try:
