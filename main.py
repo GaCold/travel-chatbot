@@ -5,112 +5,108 @@ Main entry point for Travel Chatbot System
 
 import os
 import sys
+import uvicorn
+from typing import List
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
 from src.chatbot import TravelChatbot
 from src.config import Config
 
 
-def main():
-    """Main function to run the travel chatbot"""
+app = FastAPI(title="Travel Chatbot API", version="1.0.0")
+
+
+# Serve static files from ui directory
+ui_path = Path("ui")
+if ui_path.exists():
+    app.mount("/static", StaticFiles(directory="ui"), name="static")
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+manager = ConnectionManager()
+
+@app.get("/")
+async def read_root():
+    return FileResponse("ui/index.html")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "Travel Chatbot"}
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
     config = Config()
-
-    # DEBUG: Kiểm tra cấu hình
-    print("🔧 CẤU HÌNH HỆ THỐNG:")
-    print(f"   LLM Model: {config.LLM_MODEL}")
-    print(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
-    print(f"   Embedding Type: {config.EMBEDDING_MODEL_TYPE}")
-    print(f"   Data Directory: {config.DATA_DIRECTORY}")
-    print(f"   Persist Directory: {config.PERSIST_DIRECTORY}")
-
-    # Initialize chatbot
     chatbot = TravelChatbot(
         llm_model=config.LLM_MODEL,
         embedding_model_name=config.EMBEDDING_MODEL_NAME,
         embedding_model_type=config.EMBEDDING_MODEL_TYPE,
         persist_directory=config.PERSIST_DIRECTORY,
     )
-    # Setup or load Chroma vector store
     if not os.path.exists(config.PERSIST_DIRECTORY):
-        print("🔄 Đang thiết lập Chroma vector store...")
         chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
-        print("✅ Thiết lập hoàn tất!")
     else:
-        print("📂 Đang tải Chroma vector store có sẵn...")
-        if chatbot.load_existing_vector_store():
-            chatbot.check_vector_store_status()
-            # Kiểm tra vector store đã load
-            try:
-                info = chatbot.get_vector_store_info()
-                print("📋 Vector store info:", info)
-            except Exception as e:
-                print(f"❌ Lỗi kiểm tra vector store: {e}")
-        else:
-            print("⚠️  Không thể load vector store, đang tạo mới...")
-            chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
+        chatbot.load_existing_vector_store()
 
-    print("\n" + "=" * 50)
-    print("🤖 CHATBOT TƯ VẤN DU LỊCH CẦN THƠ")
-    print("=" * 50)
-    print("Gõ 'quit', 'exit' hoặc 'thoát' để dừng chương trình")
-
-    # Demo questions
-    demo_questions = [
-        "Cần Thơ có những địa điểm du lịch nào?",
-        "Món ăn ngon ở Cần Thơ là gì?",
-        "Lịch trình 2 ngày ở Cần Thơ như thế nào?",
-        "Địa điểm check-in đẹp ở Cần Thơ?",
-    ]
-
-    print("\n💡 Câu hỏi gợi ý:")
-    for i, question in enumerate(demo_questions, 1):
-        print(f"  {i}. {question}")
-
-    # Chat loop
     while True:
         try:
-            user_input = input("\n🙋 Bạn: ").strip()
+            data = await websocket.receive_text()
+            print(f"Received data: {data}")
+            # Expect client to send JSON: {type: 'message', message: '...'}
+            import json
+            try:
+                payload = json.loads(data)
+                msg_type = payload.get('type', 'message')
+                message = payload.get('message', '')
+            except Exception:
+                msg_type = 'message'
+                message = data
 
-            if user_input.lower() in ["quit", "exit", "thoát", "q"]:
-                print("👋 Tạm biệt! Hẹn gặp lại!")
-                break
-
-            if not user_input:
-                continue
-
-            # Get response với loading
-            print("🔍 Đang tìm kiếm thông tin...", end="", flush=True)
-            result = chatbot.ask_question(user_input)
-            print("\r", end="")
-
-            # Display response
-            print(f"\n🤖 Bot: {result['answer']}")
-
-            # Display sources với metadata chính xác
-            if result.get("source_documents"):
-                print(f"\n📚 Tham khảo từ {len(result['source_documents'])} nguồn:")
-                for i, doc in enumerate(result["source_documents"], 1):
-                    metadata = doc.get("metadata", {})
-
-                    title = metadata.get("article_title", "N/A")
-                    topic = metadata.get("topic", "")
-                    location = metadata.get("location_city", "")
-
-                    source_info = f"  {i}. {title}"
-                    if topic:
-                        source_info += f" - {topic}"
-                    if location:
-                        source_info += f" [{location}]"
-
-                    print(source_info)
-
-        except KeyboardInterrupt:
-            print("\n👋 Tạm biệt! Hẹn gặp lại!")
-            break
+            result = await chatbot.ask_question(message)
+            response = {
+                "type": "response",
+                "message": result["answer"],
+                "sources": [
+                    {
+                        "title": doc.get("metadata", {}).get("article_title", "N/A"),
+                        "topic": doc.get("metadata", {}).get("topic", ""),
+                        "location": doc.get("metadata", {}).get("location_city", ""),
+                    }
+                    for doc in result.get("source_documents", [])
+                ],
+            }
+            await websocket.send_json(response)
         except Exception as e:
-            print(f"\n❌ Lỗi: {e}")
-            import traceback
+            await websocket.send_json({"type": "error", "message": f"Lỗi: {e}"})
 
-            traceback.print_exc()
 
+def main():
+    """Run the FastAPI server"""
+    
+    print("🚀 Khởi động Travel Chatbot Server...")
+    print("🔧 CẤU HÌNH HỆ THỐNG:")
+    config = Config()
+    print(f"   LLM Model: {config.LLM_MODEL}")
+    print(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
+    print(f"   Web UI: http://localhost:8000")
+    print(f"   WebSocket: ws://localhost:8000/ws")
+    
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 if __name__ == "__main__":
     main()

@@ -89,6 +89,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 raise ValueError("No documents found in the data directory")
             
             logger.info(f"Total documents loaded: {len(documents)}")
+            documents = self.text_splitter.split_documents(documents)
             
             # Tạo Chroma vector store với metadata
             self.vector_store = Chroma.from_documents(
@@ -182,7 +183,6 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             if fallback_where_clause:
                 print(f"🎯 Nỗ lực 2 (Chỉ lọc địa điểm, dùng MMR): {fallback_where_clause}")
                 
-                # === ĐÂY LÀ PHẦN SỬA LỖI ===
                 # Lỗi TypeError là do similarity_search() không nhận 'search_type'.
                 # Chúng ta PHẢI tạo một retriever mới với as_retriever()
                 fallback_retriever_mmr = self.vector_store.as_retriever(
@@ -195,7 +195,6 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                     }
                 )
                 docs = fallback_retriever_mmr.invoke(question)
-                # === KẾT THÚC SỬA LỖI ===
             else:
                 # Nếu câu hỏi là "lịch trình" (ko có địa điểm) -> tìm kiếm bth
                 docs = self.retriever.invoke(question) # Dùng retriever MMR mặc định (đã setup trong __init__)
@@ -207,7 +206,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
         return docs
 
-    def ask_question(self, question: str) -> Dict[str, Any]:
+    async def ask_question(self, question: str) -> Dict[str, Any]:
         """Hỏi câu hỏi và nhận câu trả lời với metadata filtering"""
         if not self.vector_store:
             raise ValueError("Vector store chưa được khởi tạo. Hãy gọi setup_vector_store() trước.")
@@ -233,16 +232,16 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             print(f"   Found {len(relevant_docs)} relevant document(s)")
             
             # DEBUG: Hiển thị nội dung các document tìm được
-            for i, doc in enumerate(relevant_docs):
-                print(f"📄 Document {i+1}:")
-                print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
-                print(f"   Region: {doc.metadata.get('region', 'N/A')}")
-                print(f"   Type: {doc.metadata.get('type', 'N/A')}")
-                # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
-                print(f"   Location: {doc.metadata.get('location_city', 'N/A')} / {doc.metadata.get('location_specific', 'N/A')}")
-                # === KẾT THÚC THAY ĐỔI ===
-                print(f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}")
-                print()
+            # for i, doc in enumerate(relevant_docs):
+            #     print(f"📄 Document {i+1}:")
+            #     print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
+            #     print(f"   Region: {doc.metadata.get('region', 'N/A')}")
+            #     print(f"   Type: {doc.metadata.get('type', 'N/A')}")
+            #     # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
+            #     print(f"   Location: {doc.metadata.get('location_city', 'N/A')} / {doc.metadata.get('location_specific', 'N/A')}")
+            #     # === KẾT THÚC THAY ĐỔI ===
+            #     print(f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}")
+            #     print()
             
             # ... (Phần còn lại của hàm giữ nguyên) ...
             
@@ -259,7 +258,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             
             # Chạy LLM với context và question
             prompt = self.prompt_template.format(context=context, question=question)
-            answer = "okie" #self.llm.invoke(prompt)
+            answer = self.llm.invoke(prompt)
             
             # Kiểm tra câu trả lời
             if not answer or "Hiện tại chưa có đủ dữ liệu" in answer:

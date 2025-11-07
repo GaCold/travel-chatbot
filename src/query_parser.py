@@ -39,10 +39,7 @@ class QueryParser:
         
         self.location_map = {
             # ===== MIỀN BẮC (TỪ FILE JSONL) =====
-            # --- Location Specific (Ưu tiên cao) ---
             "vinh_ha_long_4626380": (["vịnh hạ long", "hạ long", "halong"], "location_specific"),
-            
-            # --- Location City (Chung) ---
             "sa_pa_lao_cai": (["sa pa", "sapa"], "location_city"),
             "lao_cai_4697212": (["lào cai"], "location_city"),
             "meo_vac_4654320": (["mèo vạc"], "location_city"),
@@ -50,13 +47,12 @@ class QueryParser:
             "moc_chau_4098678": (["mộc châu"], "location_city"),
             "ninh_binh_4127327": (["ninh bình", "tràng an", "tam cốc", "bái đính"], "location_city"),
             "thai_nguyen_4613586": (["thái nguyên", "hồ núi cốc"], "location_city"),
-            "48_gio_o_y_ty_4807822": (["y tý", "y ty"], "location_city"), # Key này hơi lạ nhưng đúng theo file
+            "48_gio_o_y_ty_4807822": (["y tý", "y ty"], "location_city"),
             "ta_xua_4656282": (["tà xùa"], "location_city"),
             "ha_noi_4459188": (["hà nội", "hanoi"], "location_city"),
             "ha_giang": (["hà giang"], "location_city"),
 
             # ===== MIỀN TRUNG (TỪ FILE JSONL) =====
-            # --- Location Specific (Ưu tiên cao) ---
             "ba_na_hills": (["bà nà", "ba na hills", "cầu vàng"], "location_specific"),
             "cu_lao_xanh_4598306": (["cù lao xanh"], "location_specific"),
             "cu_lao_cham_4751193": (["cù lao chàm"], "location_specific"),
@@ -69,8 +65,6 @@ class QueryParser:
             "vuon_quoc_gia_pu_mat_4858184": (["pù mát", "vườn quốc gia pù mát"], "location_specific"),
             "vuon_quoc_gia_bach_ma_4817811": (["bạch mã", "vườn quốc gia bạch mã"], "location_specific"),
             "pho_co_hoi_an": (["hội an", "phố cổ hội an"], "location_specific"),
-
-            # --- Location City (Chung) ---
             "binh_thuan_4749039": (["bình thuận", "phan thiết"], "location_city"),
             "binh_dinh_4729689": (["bình định"], "location_city"),
             "quy_nhon_4119727": (["quy nhơn"], "location_city"),
@@ -90,22 +84,19 @@ class QueryParser:
             "nghe_an_4455646": (["nghệ an", "vinh"], "location_city"),
             "ninh_thuan_4453272": (["ninh thuận", "phan rang"], "location_city"),
             "phu_yen_4465949": (["phú yên", "tuy hòa", "tuy hoa"], "location_city"),
-            "quang_tri_4772745": (["quảng trị", "quảng bình", "đồng hới", "phong nha"], "location_city"), # Dữ liệu của bạn gộp Quảng Trị và Quảng Bình, tôi map theo data
+            "quang_tri_4772745": (["quảng trị", "quảng bình", "đồng hới", "phong nha"], "location_city"),
             "quang_ngai_4631099": (["quảng ngãi"], "location_city"),
             "hue_4126937": (["huế", "thừa thiên huế"], "location_city"),
             "thanh_hoa_4607348": (["thanh hóa", "thanh hoa"], "location_city"),
             "bao_loc_4643396": (["bảo lộc"], "location_city"),
 
             # ===== MIỀN NAM (TỪ FILE JSONL) =====
-            # --- Location Specific (Ưu tiên cao) ---
             "con_dao_4445727": (["côn đảo"], "location_specific"),
             "can_gio_4673430": (["cần giờ"], "location_specific"),
             "nam_du_4764453": (["nam du", "đảo nam du"], "location_specific"),
             "nui_dinh_diem_cam_trai_cuoi_tuan_gan_tp_hcm_4545681": (["núi dinh"], "location_specific"),
             "rung_tram_tra_su_4665214": (["trà sư", "rừng tràm trà sư"], "location_specific"),
             "goi_y_an_choi_o_pho_di_bo_nguyen_hue_4632658": (["phố đi bộ nguyễn huệ"], "location_specific"),
-            
-            # --- Location City (Chung) ---
             "an_giang_4445399": (["an giang"], "location_city"),
             "ba_ria_vung_tau_4479713": (["bà rịa - vũng tàu", "bà rịa"], "location_city"),
             "vung_tau_4476318": (["vũng tàu"], "location_city"),
@@ -117,7 +108,7 @@ class QueryParser:
             "dong_thap_4685835": (["đồng tháp", "đồng tháp mười", "sa đéc"], "location_city"),
             "dong_nai_4811218": (["đồng nai", "biên hòa"], "location_city"),
             "hcm_city": (["tp hcm", "hồ chí minh", "sài gòn", "saigon"], "location_city"),
-            "phu_quoc": (["phú quốc", "đảo phú quốc"], "location_city"), # Data của bạn phân loại Phú Quốc là "city"
+            "phu_quoc": (["phú quốc", "đảo phú quốc"], "location_city"),
             "long_an_4796307": (["long an"], "location_city"),
             "kien_giang_4764240": (["kiên giang", "rạch giá", "hà tiên"], "location_city"),
             "tay_ninh_4795506": (["tây ninh"], "location_city"),
@@ -234,5 +225,3 @@ class QueryParser:
             return filters[0]
         
         return {"$and": filters}
-
-    # Các hàm cũ không cần thiết đã được lược bỏ

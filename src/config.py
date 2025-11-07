@@ -29,13 +29,13 @@ class Config:
     # Path settings
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     DATA_DIRECTORY = os.path.join(BASE_DIR, "data")
-    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "chroma_db")  # Chuyển sang Chroma
+    PERSIST_DIRECTORY = os.path.join(BASE_DIR, "chroma_db")
     LOG_DIRECTORY = os.path.join(BASE_DIR, "logs")
     
     # RAG settings
     CHUNK_SIZE = 1000
     CHUNK_OVERLAP = 200
-    SEARCH_K = 5  # Tăng số lượng documents trả về
+    SEARCH_K = 5  # Number of documents retrieved per query
     
     # Chroma settings
     CHROMA_COLLECTION_NAME = "travel_chatbot_collection"

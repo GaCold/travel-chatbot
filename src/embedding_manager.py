@@ -1,6 +1,5 @@
-import os
 from langchain_community.embeddings import OllamaEmbeddings, HuggingFaceEmbeddings
-from .config import Config, EmbeddingModelType
+from .config import Config
 import logging
 
 logger = logging.getLogger(__name__)
