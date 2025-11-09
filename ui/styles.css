@@ -81,7 +81,7 @@ body {
 .chat-header {
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
     color: white;
-    padding: var(--spacing-lg) var(--spacing-xl);
+    padding: var(--spacing-md) var(--spacing-xl);
     box-shadow: var(--shadow-md);
     position: relative;
     overflow: hidden;
@@ -123,6 +123,11 @@ body {
     justify-content: center;
     color: white;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.logo-icon img {
+    width: 32px;
+    height: 32px;
 }
 
 .logo-text h1 {
@@ -469,7 +474,7 @@ body {
 .input-container {
     display: flex;
     gap: var(--spacing-md);
-    align-items: flex-end;
+    align-items: center;
     background: var(--bg-secondary);
     border: 2px solid var(--border-color);
     border-radius: var(--radius-xl);

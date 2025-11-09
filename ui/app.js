@@ -1,6 +1,6 @@
 // ==================== Configuration ====================
 const CONFIG = {
-    wsUrl: 'ws://localhost:8000/ws',
+    wsUrl: 'ws://localhost:8001/ws',
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
     typingDelay: 50,
@@ -205,17 +205,17 @@ function addMessage(text, sender, animated = false) {
     messageDiv.appendChild(contentDiv);
 
     elements.messagesArea.appendChild(messageDiv);
-    
+
     // Add smooth appearance
     messageDiv.style.opacity = '0';
     messageDiv.style.transform = 'translateY(10px)';
     messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    
+
     setTimeout(() => {
         messageDiv.style.opacity = '1';
         messageDiv.style.transform = 'translateY(0)';
     }, 10);
-    
+
     scrollToBottom();
 
     return messageDiv;
@@ -223,7 +223,7 @@ function addMessage(text, sender, animated = false) {
 
 function parseMarkdown(text) {
     if (!text) return '';
-    
+
     return text
         // Code blocks with backticks
         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
@@ -327,11 +327,11 @@ function transformTypingToMessage(text) {
     // Remove the ID so it won't be reused
     typingContainer.removeAttribute('id');
     bubbleContent.removeAttribute('id');
-    
+
     // Add smooth fade-in effect
     bubbleContent.style.opacity = '0';
     bubbleContent.style.transition = 'opacity 0.3s ease-in-out';
-    
+
     setTimeout(() => {
         bubbleContent.style.opacity = '1';
     }, 10);

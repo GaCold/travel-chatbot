@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Travel Assistant - Trợ lý Du lịch AI</title>
-    <link rel="stylesheet" href="static/styles.css">
+    <link rel="stylesheet" href="ui/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
@@ -16,11 +16,7 @@
             <div class="header-content">
                 <div class="logo-section">
                     <div class="logo-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M16 2C8.268 2 2 8.268 2 16C2 23.732 8.268 30 16 30C23.732 30 30 23.732 30 16C30 8.268 23.732 2 16 2ZM16 4C22.627 4 28 9.373 28 16C28 22.627 22.627 28 16 28C9.373 28 4 22.627 4 16C4 9.373 9.373 4 16 4Z" fill="currentColor"/>
-                            <path d="M16 8C13.791 8 12 9.791 12 12C12 14.209 13.791 16 16 16C18.209 16 20 14.209 20 12C20 9.791 18.209 8 16 8Z" fill="currentColor"/>
-                            <path d="M8 20C8 17.791 9.791 16 12 16H20C22.209 16 24 17.791 24 20V24H8V20Z" fill="currentColor"/>
-                        </svg>
+                        <img src="./ui/img/chatbot-icon.png" alt="icon chatbot">
                     </div>
                     <div class="logo-text">
                         <h1>Travel Assistant</h1>
@@ -50,29 +46,7 @@
                     <h2>Xin chào! Tôi là Travel Assistant</h2>
                     <p>Tôi có thể giúp bạn khám phá những điểm đến tuyệt vời ở Việt Nam</p>
                     
-                    <div class="suggestion-cards">
-                        <button class="suggestion-card" onclick="sendSuggestion('Gợi ý cho tôi các địa điểm du lịch ở Hà Nội')">
-                            <div class="card-icon">🏛️</div>
-                            <div class="card-text">Khám phá Hà Nội</div>
-                        </button>
-                        <button class="suggestion-card" onclick="sendSuggestion('Món ăn đặc sản Sapa là gì?')">
-                            <div class="card-icon">🍜</div>
-                            <div class="card-text">Ẩm thực Sapa</div>
-                        </button>
-                        <button class="suggestion-card" onclick="sendSuggestion('Lên lịch trình 3 ngày ở Hà Nội')">
-                            <div class="card-icon">📅</div>
-                            <div class="card-text">Lập lịch trình 3 ngày Hà Nội</div>
-                        </button>
-                        <button class="suggestion-card" onclick="sendSuggestion('Văn hóa địa phương ở Hà Giang')">
-                            <div class="card-icon">🎭</div>
-                            <div class="card-text">Văn hóa bản địa Hà Giang</div>
-                        </button>
-                    </div>
                     
-                    <!-- Test Button -->
-                    <button class="test-button" onclick="testTypingIndicator()" style="margin-top: 2rem;">
-                        🧪 Xem Demo Typing Indicator
-                    </button>
                 </div>
             </div>
 
@@ -109,11 +83,11 @@
             </div>
             <div class="input-footer">
                 <span class="char-count"><span id="charCount">0</span>/500</span>
-                <span class="powered-by">Powered by AI</span>
+                <span class="powered-by">© 2025 Travel Chatbot</span>
             </div>
         </div>
     </div>
 
-    <script src="static/app.js"></script>
+    <script src="ui/app.js"></script>
 </body>
 </html>

@@ -23,7 +23,7 @@ app = FastAPI(title="Travel Chatbot API", version="1.0.0")
 # Serve static files from ui directory
 ui_path = Path("ui")
 if ui_path.exists():
-    app.mount("/static", StaticFiles(directory="ui"), name="static")
+    app.mount("/ui", StaticFiles(directory="ui"), name="ui")
 
 class ConnectionManager:
     def __init__(self):
@@ -106,10 +106,10 @@ def main():
     config = Config()
     print(f"   LLM Model: {config.LLM_MODEL}")
     print(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
-    print(f"   Web UI: http://localhost:8000")
-    print(f"   WebSocket: ws://localhost:8000/ws")
-    
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print(f"   Web UI: http://localhost:8001")
+    print(f"   WebSocket: ws://localhost:8001/ws")
+
+    uvicorn.run(app, host="0.0.0.0", port=8001)
 
 if __name__ == "__main__":
     main()

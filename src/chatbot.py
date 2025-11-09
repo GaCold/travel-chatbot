@@ -1,16 +1,22 @@
-import os
 import json
 import logging
-from typing import List, Dict, Any, Optional
+import os
+import sys
+
+import pysqlite3
+
+sys.modules["sqlite3"] = pysqlite3
+from typing import Any, Dict, List, Optional
+
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores import Chroma
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from .data_loader import DataLoader
 from .config import Config
+from .data_loader import DataLoader
 from .embedding_manager import EmbeddingManager
 from .query_parser import QueryParser
 
@@ -25,7 +31,7 @@ class TravelChatbot:
         llm_model="llama3.1",
         embedding_model_name="nomic-embed-text",
         embedding_model_type="ollama",
-        persist_directory="./faiss_vietnamese_index",
+        persist_directory="./chroma_db",
     ):
 
         self.config = Config()
@@ -67,7 +73,7 @@ HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 3. Trả lời TRỰC TIẾP câu hỏi của người dùng, không lan man hay thêm thắt thông tin không cần thiết.
 
 **QUY TẮC ĐẶC BIỆT - CHỈ ÁP DỤNG KHI NGƯỜI DÙNG HỎI VỀ LỊCH TRÌNH:**
-4. Chỉ khi người dùng hỏi TRỰC TIẾP về "lịch trình", "kế hoạch đi chơi", "hành trình", "schedule" (ví dụ: "lịch trình 2 ngày Sapa", "kế hoạch đi Vũng Tàu 3 ngày") VÀ context KHÔNG có lịch trình cụ thể sẵn, NHƯNG có thông tin về địa điểm/món ăn:
+4. Chỉ khi người dùng hỏi *TRỰC TIẾP* về "lịch trình", "kế hoạch đi chơi", "hành trình", "schedule" (ví dụ: "lịch trình 2 ngày Sapa", "kế hoạch đi Vũng Tàu 3 ngày") VÀ context KHÔNG có lịch trình cụ thể sẵn, NHƯNG có thông tin về địa điểm/món ăn:
     * Lúc đó mới được tự tổng hợp lịch trình gợi ý logic.
     * Lịch trình PHẢI CHỈ SỬ DỤNG thông tin có trong context.
     * KHÔNG ĐƯỢC bịa thêm địa điểm, món ăn không có trong context.
@@ -253,19 +259,12 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             # DEBUG: Hiển thị nội dung các document tìm được
             for i, doc in enumerate(relevant_docs):
                 print(f"📄 Document {i+1}:")
-                print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
-                print(f"   Region: {doc.metadata.get('region', 'N/A')}")
-                print(f"   Type: {doc.metadata.get('type', 'N/A')}")
-                print(
-                    f"   Location: {doc.metadata.get('location_city', 'N/A')} / {doc.metadata.get('location_specific', 'N/A')}"
-                )
                 print(
                     f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}"
                 )
-                print(f"   Content preview: {doc.page_content[:200]}...")
+                print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
+                print(f"   Region: {doc.metadata.get('region', 'N/A')}")
                 print()
-
-            # ... (Phần còn lại của hàm giữ nguyên) ...
 
             # Nếu không có document liên quan
             if not relevant_docs:

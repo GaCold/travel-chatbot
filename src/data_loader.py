@@ -1,9 +1,10 @@
-import os
-import json
 import glob
-from typing import List
-from langchain_core.documents import Document
+import json
 import logging
+import os
+from typing import List
+
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ class DataLoader:
         """
         Làm sạch metadata để tương thích với Chroma.
         Chroma chỉ chấp nhận: str, int, float, bool, None
-        
+
         Phiên bản này tối ưu cách xử lý list:
         - List các giá trị đơn (str, int...) sẽ được nối (join).
         - List các giá trị phức tạp (dict...) sẽ được chuyển thành chuỗi JSON.
@@ -109,7 +110,10 @@ class DataLoader:
                 if not value:
                     cleaned[key] = ""
                 # Kiểm tra xem list này chứa giá trị đơn hay phức tạp
-                elif all(isinstance(item, (str, int, float, bool, type(None))) for item in value):
+                elif all(
+                    isinstance(item, (str, int, float, bool, type(None)))
+                    for item in value
+                ):
                     # List các giá trị đơn (ví dụ: "alias": ["a", "b"])
                     str_items = [str(item) for item in value if item is not None]
                     cleaned[key] = ", ".join(str_items)
