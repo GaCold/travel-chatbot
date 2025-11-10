@@ -15,10 +15,10 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from .config import Config
-from .data_loader import DataLoader
-from .embedding_manager import EmbeddingManager
-from .query_parser import QueryParser
+from src.config import Config
+from src.data_loader import DataLoader
+from src.embedding_manager import EmbeddingManager
+from src.query_parser import QueryParser
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +73,11 @@ HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 3. Trả lời TRỰC TIẾP câu hỏi của người dùng, không lan man hay thêm thắt thông tin không cần thiết.
 
 **QUY TẮC ĐẶC BIỆT - CHỈ ÁP DỤNG KHI NGƯỜI DÙNG HỎI VỀ LỊCH TRÌNH:**
-4. Chỉ khi người dùng hỏi *TRỰC TIẾP* về "lịch trình", "kế hoạch đi chơi", "hành trình", "schedule" (ví dụ: "lịch trình 2 ngày Sapa", "kế hoạch đi Vũng Tàu 3 ngày") VÀ context KHÔNG có lịch trình cụ thể sẵn, NHƯNG có thông tin về địa điểm/món ăn:
-    * Lúc đó mới được tự tổng hợp lịch trình gợi ý logic.
-    * Lịch trình PHẢI CHỈ SỬ DỤNG thông tin có trong context.
-    * KHÔNG ĐƯỢC bịa thêm địa điểm, món ăn không có trong context.
-    * Bắt đầu: "Dạ, hiện tại tôi chưa có lịch trình cụ thể, tuy nhiên dựa trên thông tin có sẵn, tôi gợi ý lịch trình sau:"
+4. Chỉ khi người dùng hỏi *TRỰC TIẾP* về "lịch trình", "kế hoạch đi chơi", "hành trình", "schedule" → mới được trả lời theo mẫu:
+   "Dạ, hiện tại tôi chưa có lịch trình cụ thể, tuy nhiên dựa trên thông tin có sẵn, tôi gợi ý lịch trình sau:"
 
-**CÁC LOẠI CÂU HỎI KHÁC (KHÔNG PHẢI LỊCH TRÌNH):**
-5. Nếu hỏi về "món ăn đặc sản", "ăn gì", "địa điểm tham quan", "chơi gì", v.v. → Trả lời TRỰC TIẾP bằng cách liệt kê các món ăn/địa điểm có trong context, KHÔNG tổng hợp lịch trình.
+5. Nếu người dùng KHÔNG hỏi về lịch trình (ví dụ chỉ hỏi về địa điểm, địa điểm du lịch, món ăn, ăn gì, chơi gì, ở đâu, tham quan...) →
+   **KHÔNG ĐƯỢC dùng cụm từ này**, chỉ liệt kê các thông tin có trong context.
 
 6. Nếu KHÔNG có thông tin liên quan trong context, trả lời: "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm."
 
@@ -171,14 +168,14 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         # --- NỖ LỰC 1: LỌC CHÍNH XÁC (Địa điểm + Loại) ---
         strict_filter = self.query_parser.build_filter_dict(parsed)
 
-        if strict_filter:
-            print(f"🎯 Nỗ lực 1 (Lọc chính xác): {strict_filter}")
-            # Dùng .as_retriever() để lọc, đây là cách chuẩn
-            strict_retriever = self.vector_store.as_retriever(
-                search_type="similarity",  # Dùng similarity search chuẩn
-                search_kwargs={"k": self.config.SEARCH_K, "filter": strict_filter},
-            )
-            docs = strict_retriever.invoke(question)
+        # if strict_filter:
+        #     print(f"🎯 Nỗ lực 1 (Lọc chính xác): {strict_filter}")
+        #     # Dùng .as_retriever() để lọc, đây là cách chuẩn
+        #     strict_retriever = self.vector_store.as_retriever(
+        #         search_type="similarity",  # Dùng similarity search chuẩn
+        #         search_kwargs={"k": self.config.SEARCH_K, "filter": strict_filter},
+        #     )
+        #     docs = strict_retriever.invoke(question)
 
         # --- NỖ LỰC 2: LỌC DỰ PHÒNG (Chỉ lọc địa điểm, dùng MMR) ---
         # Điều kiện: (Lọc 1 không thấy) VÀ (câu hỏi có 'type' (ý định) rõ ràng, ví dụ "lịch trình", "ăn gì")
@@ -242,13 +239,13 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             parsed_query = self.query_parser.parse_query(question)
 
             # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
-            print(
-                f"⚙️  Parsed query: "
-                f"region={parsed_query.get('region')}, "
-                f"type={parsed_query.get('type')}, "
-                f"city={parsed_query.get('location_city')}, "
-                f"specific={parsed_query.get('location_specific')}"
-            )
+            # print(
+            #     f"⚙️  Parsed query: "
+            #     f"region={parsed_query.get('region')}, "
+            #     f"type={parsed_query.get('type')}, "
+            #     f"city={parsed_query.get('location_city')}, "
+            #     f"specific={parsed_query.get('location_specific')}"
+            # )
             # === KẾT THÚC THAY ĐỔI ===
 
             # Lấy các document liên quan với filter
@@ -257,14 +254,14 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             print(f"   Found {len(relevant_docs)} relevant document(s)")
 
             # DEBUG: Hiển thị nội dung các document tìm được
-            for i, doc in enumerate(relevant_docs):
-                print(f"📄 Document {i+1}:")
-                print(
-                    f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}"
-                )
-                print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
-                print(f"   Region: {doc.metadata.get('region', 'N/A')}")
-                print()
+            # for i, doc in enumerate(relevant_docs):
+            #     print(f"📄 Document {i+1}:")
+            #     print(
+            #         f"   Topic: {doc.metadata.get('topic', 'N/A')[:100] if doc.metadata.get('topic') else 'N/A'}"
+            #     )
+            #     print(f"   Title: {doc.metadata.get('article_title', 'N/A')}")
+            #     print(f"   Region: {doc.metadata.get('region', 'N/A')}")
+            #     print()
 
             # Nếu không có document liên quan
             if not relevant_docs:
@@ -292,12 +289,8 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 "answer": answer.strip(),
                 "source_documents": [
                     {
-                        "content": (
-                            doc.page_content[:500] + "..."
-                            if len(doc.page_content) > 500
-                            else doc.page_content
-                        ),
-                        "metadata": doc.metadata,
+                        "topic": doc.metadata.get("topic", "N/A"),
+                        "source_file" : doc.metadata.get("source_file", "N/A"),
                     }
                     for doc in relevant_docs
                 ],

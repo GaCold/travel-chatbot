@@ -3,7 +3,7 @@ import logging
 from langchain_community.embeddings import (HuggingFaceEmbeddings,
                                             OllamaEmbeddings)
 
-from .config import Config
+from src.config import Config
 
 logger = logging.getLogger(__name__)
 
