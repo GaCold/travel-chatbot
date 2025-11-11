@@ -60,7 +60,7 @@ function handleWebSocketMessage(event) {
 
         // Transform typing indicator into message
         if (data.type === 'response') {
-            transformTypingToMessage(data.message || data.text);
+            transformTypingToMessage(data.message || data.text, data.sources);
         } else if (data.type === 'error') {
             transformTypingToMessage('Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.');
         }
@@ -298,7 +298,7 @@ function showTypingIndicator() {
     scrollToBottom();
 }
 
-function transformTypingToMessage(text) {
+function transformTypingToMessage(text, sources = []) {
     const typingContainer = document.getElementById('typing-message-container');
     const bubbleContent = document.getElementById('typing-bubble-content');
 
@@ -317,6 +317,105 @@ function transformTypingToMessage(text) {
     // Parse and render markdown content
     const formattedText = parseMarkdown(text);
     bubbleContent.innerHTML = formattedText;
+
+    // Add sources if available
+    if (sources && sources.length > 0) {
+        const sourcesContainer = document.createElement('div');
+        sourcesContainer.className = 'message-sources';
+        
+        // Get unique sources (deduplicate by source_file)
+        const uniqueSources = [];
+        const seenFiles = new Set();
+        
+        for (const source of sources) {
+            if (source.source_file && !seenFiles.has(source.source_file)) {
+                uniqueSources.push(source);
+                seenFiles.add(source.source_file);
+            }
+        }
+
+        console.log('Unique sources:', uniqueSources);
+        // Show first source as main reference
+        if (uniqueSources.length > 0) {
+            const firstSource = uniqueSources[0];
+            const sourceDiv = document.createElement('div');
+            sourceDiv.className = 'source-item';
+            
+            const sourceLabel = document.createElement('span');
+            sourceLabel.className = 'source-label';
+            sourceLabel.textContent = '📚: ';
+            
+            const sourceWrapper = document.createElement('div');
+            sourceWrapper.className = 'source-wrapper';
+            
+            const sourceLink = document.createElement('a');
+            sourceLink.href = firstSource.source_file;
+            sourceLink.target = '_blank';
+            sourceLink.className = 'source-link';
+            sourceLink.textContent =  'Tài liệu tham khảo';
+            sourceLink.rel = 'noopener noreferrer';
+            
+            // Create tooltip with all topics from this source
+            const tooltip = document.createElement('div');
+            tooltip.className = 'source-tooltip';
+            
+            const tooltipTitle = document.createElement('div');
+            tooltipTitle.className = 'tooltip-title';
+            tooltipTitle.textContent = 'Topic:';
+            tooltip.appendChild(tooltipTitle);
+            
+            const tooltipTopics = document.createElement('div');
+            tooltipTopics.className = 'tooltip-topics';
+            
+            // Add all topics from all sources with same source_file
+            for (const source of sources) {
+                if (source.source_file === firstSource.source_file && source.topic) {
+                    const topicItem = document.createElement('div');
+                    topicItem.className = 'tooltip-topic-item';
+                    topicItem.textContent = '• ' + source.topic;
+                    tooltipTopics.appendChild(topicItem);
+                }
+            }
+            
+            tooltip.appendChild(tooltipTopics);
+            sourceWrapper.appendChild(sourceLink);
+            sourceWrapper.appendChild(tooltip);
+            
+            sourceDiv.appendChild(sourceLabel);
+            sourceDiv.appendChild(sourceWrapper);
+            sourcesContainer.appendChild(sourceDiv);
+        }
+
+        // Show additional topics if available
+        if (uniqueSources.length > 1) {
+            const topicsDiv = document.createElement('div');
+            topicsDiv.className = 'related-topics';
+            
+            const topicsLabel = document.createElement('div');
+            topicsLabel.className = 'topics-label';
+            topicsLabel.textContent = 'Các chủ đề liên quan:';
+            topicsDiv.appendChild(topicsLabel);
+            
+            const topicsList = document.createElement('div');
+            topicsList.className = 'topics-list';
+            
+            for (let i = 1; i < uniqueSources.length && i < 4; i++) {
+                const topic = uniqueSources[i];
+                const topicLink = document.createElement('a');
+                topicLink.href = topic.source_file;
+                topicLink.target = '_blank';
+                topicLink.className = 'topic-tag';
+                topicLink.textContent = topic.topic;
+                topicLink.rel = 'noopener noreferrer';
+                topicsList.appendChild(topicLink);
+            }
+            
+            topicsDiv.appendChild(topicsList);
+            sourcesContainer.appendChild(topicsDiv);
+        }
+
+        bubbleContent.appendChild(sourcesContainer);
+    }
 
     // Add timestamp
     const timeDiv = document.createElement('div');
