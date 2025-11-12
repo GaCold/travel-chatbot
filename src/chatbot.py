@@ -3,9 +3,9 @@ import logging
 import os
 import sys
 
-import pysqlite3
+# import pysqlite3
 
-sys.modules["sqlite3"] = pysqlite3
+# sys.modules["sqlite3"] = pysqlite3
 from typing import Any, Dict, List, Optional
 
 from langchain_community.llms import Ollama

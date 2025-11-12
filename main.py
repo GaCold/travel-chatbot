@@ -25,6 +25,7 @@ ui_path = Path("ui")
 if ui_path.exists():
     app.mount("/ui", StaticFiles(directory="ui"), name="ui")
 
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -41,7 +42,6 @@ class ConnectionManager:
         else:
             chatbot.load_existing_vector_store()
 
-
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
@@ -49,11 +49,14 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
 
+
 manager = ConnectionManager()
+
 
 @app.get("/")
 async def read_root():
     return FileResponse("ui/index.html")
+
 
 @app.get("/health")
 async def health_check():
@@ -64,7 +67,6 @@ async def health_check():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     config = Config()
-    
 
     while True:
         try:
@@ -72,12 +74,13 @@ async def websocket_endpoint(websocket: WebSocket):
             print(f"Received data: {data}")
             # Expect client to send JSON: {type: 'message', message: '...'}
             import json
+
             try:
                 payload = json.loads(data)
-                msg_type = payload.get('type', 'message')
-                message = payload.get('message', '')
+                msg_type = payload.get("type", "message")
+                message = payload.get("message", "")
             except Exception:
-                msg_type = 'message'
+                msg_type = "message"
                 message = data
 
             result = await chatbot.ask_question(message)
@@ -98,18 +101,49 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "error", "message": f"Lỗi: {e}"})
 
 
+@app.get("/api/models")
+async def get_available_models():
+    """Get list of available LLM models"""
+    config = Config()
+    models = [
+        {"name": "llama3.1", "type": "Ollama", "status": "available"},
+        {"name": "qwen3", "type": "Ollama", "status": "available"},
+        {"name": "mistral", "type": "Ollama", "status": "available"},
+        {"name": "neural-chat", "type": "Ollama", "status": "available"},
+    ]
+    return {"current": config.LLM_MODEL, "models": models}
+
+
+@app.post("/api/model/switch")
+async def switch_model(model_name: str):
+    """Switch to a different LLM model"""
+    global chatbot
+    try:
+        config = Config()
+        # Update the chatbot with new model
+        chatbot.llm_model = model_name
+        return {
+            "status": "success",
+            "message": f"Switched to model: {model_name}",
+            "current_model": model_name,
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to switch model: {str(e)}"}
+
+
 def main():
     """Run the FastAPI server"""
-    
+
     print("🚀 Khởi động Travel Chatbot Server...")
     print("🔧 CẤU HÌNH HỆ THỐNG:")
     config = Config()
     print(f"   LLM Model: {config.LLM_MODEL}")
     print(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
-    print(f"   Web UI: http://localhost:8001")
-    print(f"   WebSocket: ws://localhost:8001/ws")
+    print(f"   Web UI: http://localhost:8000")
+    print(f"   WebSocket: ws://localhost:8000/ws")
 
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 if __name__ == "__main__":
     main()

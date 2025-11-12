@@ -1,6 +1,6 @@
 // ==================== Configuration ====================
 const CONFIG = {
-    wsUrl: 'ws://localhost:8001/ws',
+    wsUrl: 'ws://localhost:8000/ws',
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
     typingDelay: 50,
@@ -22,6 +22,11 @@ const elements = {
     statusDot: document.getElementById('statusDot'),
     statusText: document.getElementById('statusText'),
     charCount: document.getElementById('charCount'),
+    settingsModal: document.getElementById('settingsModal'),
+    modalCloseButton: document.getElementById('modalCloseButton'),
+    modalCancelButton: document.getElementById('modalCancelButton'),
+    currentModel: document.getElementById('currentModel'),
+    modelList: document.getElementById('modelList'),
 };
 
 // ==================== WebSocket Connection ====================
@@ -130,6 +135,7 @@ function sendMessageToServer(message) {
 
     if (isConnected && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
+        disableInput();
         showTypingIndicator();
     } else {
         // Queue message if not connected
@@ -305,6 +311,7 @@ function transformTypingToMessage(text) {
     if (!typingContainer || !bubbleContent) {
         // Fallback if typing indicator doesn't exist
         addMessage(text, 'bot', false); // Changed to false to show immediately
+        enableInput();
         return;
     }
 
@@ -337,6 +344,7 @@ function transformTypingToMessage(text) {
     }, 10);
 
     scrollToBottom();
+    enableInput();
 }
 
 function scrollToBottom() {
@@ -369,6 +377,132 @@ function updateSendButtonState() {
     elements.sendButton.disabled = !hasText || !isConnected;
 }
 
+// ==================== Input State Management ====================
+function disableInput() {
+    elements.messageInput.disabled = true;
+    elements.sendButton.disabled = true;
+    elements.messageInput.style.opacity = '0.6';
+    elements.messageInput.style.cursor = 'not-allowed';
+}
+
+function enableInput() {
+    elements.messageInput.disabled = false;
+    elements.messageInput.style.opacity = '1';
+    elements.messageInput.style.cursor = 'text';
+    updateSendButtonState();
+}
+
+// ==================== Settings Handler ====================
+function handleSettingsClick() {
+    console.log('Settings clicked - LLM Model Configuration');
+    openSettingsModal();
+}
+
+function openSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.add('active');
+        loadModelConfiguration();
+    }
+}
+
+function closeSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.remove('active');
+    }
+}
+
+async function loadModelConfiguration() {
+    try {
+        // Fetch current model and available models from backend
+        const response = await fetch('/api/models');
+        const data = await response.json();
+
+        displayCurrentModel(data.current || 'llama3.1');
+        await loadAvailableModels(data.models);
+    } catch (error) {
+        console.error('Error loading model configuration:', error);
+        elements.modelList.innerHTML = '<div style="color: #e74c3c; padding: 1rem;">Lỗi tải danh sách model</div>';
+    }
+}
+
+function displayCurrentModel(modelName) {
+    if (elements.currentModel) {
+        elements.currentModel.innerHTML = `<div class="model-name">📌 ${modelName}</div>`;
+    }
+}
+
+async function loadAvailableModels(models = null) {
+    if (!elements.modelList) return;
+
+    try {
+        // Use provided models or mock data
+        const modelList = models || [
+            { name: 'llama3.1', type: 'Ollama', status: 'available' },
+            { name: 'qwen3', type: 'Ollama', status: 'available' },
+            { name: 'mistral', type: 'Ollama', status: 'available' },
+            { name: 'neural-chat', type: 'Ollama', status: 'available' },
+        ];
+
+        elements.modelList.innerHTML = '';
+
+        // Get current model to mark as active
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        const currentModel = data.current;
+
+        modelList.forEach(model => {
+            const isActive = model.name === currentModel;
+            const modelElement = document.createElement('div');
+            modelElement.className = `model-item ${isActive ? 'active' : ''}`;
+            modelElement.innerHTML = `
+                <div class="model-item-name">
+                    ${model.name}
+                    <small style="display: block; color: var(--text-secondary); font-weight: 400; margin-top: 0.25rem;">${model.type}</small>
+                </div>
+                <div class="model-item-status">
+                    ${isActive ? '✓' : ''}
+                </div>
+            `;
+
+            modelElement.addEventListener('click', () => selectModel(model.name, modelElement));
+            elements.modelList.appendChild(modelElement);
+        });
+    } catch (error) {
+        console.error('Error loading models:', error);
+        elements.modelList.innerHTML = '<div style="color: #e74c3c; padding: 1rem;">Không thể tải danh sách model</div>';
+    }
+}
+
+async function selectModel(modelName, element) {
+    try {
+        console.log('Selecting model:', modelName);
+
+        // Send request to backend to switch model
+        const response = await fetch(`/api/model/switch?model_name=${modelName}`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            // Update active state in UI
+            document.querySelectorAll('.model-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            element.classList.add('active');
+
+            // Update current model display
+            displayCurrentModel(modelName);
+
+            console.log('Model switched successfully:', modelName);
+        } else {
+            alert('Lỗi: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error selecting model:', error);
+        alert('Không thể chuyển model. Vui lòng thử lại.');
+    }
+}
+
 // ==================== Utility Functions ====================
 function formatTime(date) {
     const hours = date.getHours().toString().padStart(2, '0');
@@ -380,6 +514,29 @@ function formatTime(date) {
 function initializeEventListeners() {
     // Send button click
     elements.sendButton.addEventListener('click', () => sendMessage());
+
+    // Settings button click
+    const settingsButton = document.getElementById('settingsButton');
+    if (settingsButton) {
+        settingsButton.addEventListener('click', handleSettingsClick);
+    }
+
+    // Modal close buttons
+    if (elements.modalCloseButton) {
+        elements.modalCloseButton.addEventListener('click', closeSettingsModal);
+    }
+    if (elements.modalCancelButton) {
+        elements.modalCancelButton.addEventListener('click', closeSettingsModal);
+    }
+
+    // Close modal when clicking on overlay
+    if (elements.settingsModal) {
+        elements.settingsModal.addEventListener('click', (e) => {
+            if (e.target === elements.settingsModal) {
+                closeSettingsModal();
+            }
+        });
+    }
 
     // Enter key to send (Shift+Enter for new line)
     elements.messageInput.addEventListener('keydown', (e) => {

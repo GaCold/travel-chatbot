@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <link rel="stylesheet" href="ui/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
@@ -23,9 +27,16 @@
                         <p class="subtitle">Trợ lý Du lịch Thông minh</p>
                     </div>
                 </div>
-                <div class="status-indicator">
-                    <span class="status-dot" id="statusDot"></span>
-                    <span class="status-text" id="statusText">Đang kết nối...</span>
+                <div class="header-actions">
+                    <button class="settings-button" id="settingsButton" title="Cài đặt Model LLM">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"></path>
+            </svg>
+                    </button>
+                    <div class="status-indicator">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span class="status-text" id="statusText">Đang kết nối...</span>
+                    </div>
                 </div>
             </div>
         </header>
@@ -37,16 +48,19 @@
                 <div class="welcome-content">
                     <div class="welcome-icon">
                         <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <circle cx="40" cy="40" r="38" stroke="currentColor" stroke-width="4" opacity="0.2"/>
-                            <path d="M40 10C23.431 10 10 23.431 10 40C10 56.569 23.431 70 40 70C56.569 70 70 56.569 70 40C70 23.431 56.569 10 40 10Z" stroke="currentColor" stroke-width="3"/>
-                            <path d="M30 32L40 42L50 32" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M40 42V55" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                            <circle cx="40" cy="40" r="38" stroke="currentColor" stroke-width="4" opacity="0.2" />
+                            <path
+                                d="M40 10C23.431 10 10 23.431 10 40C10 56.569 23.431 70 40 70C56.569 70 70 56.569 70 40C70 23.431 56.569 10 40 10Z"
+                                stroke="currentColor" stroke-width="3" />
+                            <path d="M30 32L40 42L50 32" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                                stroke-linejoin="round" />
+                            <path d="M40 42V55" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
                         </svg>
                     </div>
                     <h2>Xin chào! Tôi là Travel Assistant</h2>
                     <p>Tôi có thể giúp bạn khám phá những điểm đến tuyệt vời ở Việt Nam</p>
-                    
-                    
+
+
                 </div>
             </div>
 
@@ -68,16 +82,14 @@
         <!-- Input Area -->
         <div class="input-area">
             <div class="input-container">
-                <textarea 
-                    id="messageInput" 
-                    placeholder="Hỏi tôi về điểm đến, ẩm thực, văn hóa..." 
-                    rows="1"
-                    maxlength="500"
-                ></textarea>
+                <textarea id="messageInput" placeholder="Hỏi tôi về điểm đến, ẩm thực, văn hóa..." rows="1"
+                    maxlength="500"></textarea>
                 <button id="sendButton" class="send-button" disabled>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                 </button>
             </div>
@@ -88,6 +100,42 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Cài đặt Model LLM</h2>
+                <button class="modal-close" id="modalCloseButton">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="model-section">
+                    <h3>Model LLM hiện tại</h3>
+                    <div class="current-model" id="currentModel">
+                        <div class="model-name">Đang tải...</div>
+                    </div>
+                </div>
+                <div class="model-section">
+                    <h3>Danh sách Model có sẵn</h3>
+                    <div class="model-list" id="modelList">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Đang tải danh sách model...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" id="modalCancelButton">Đóng</button>
+            </div>
+        </div>
+    </div>
+
     <script src="ui/app.js"></script>
 </body>
+
 </html>
