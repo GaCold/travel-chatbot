@@ -71,12 +71,11 @@ async def websocket_endpoint(websocket: WebSocket):
     while True:
         try:
             data = await websocket.receive_text()
-            print(f"Received data: {data}")
-            # Expect client to send JSON: {type: 'message', message: '...'}
             import json
 
             try:
                 payload = json.loads(data)
+                message = payload.get('message', '')
                 msg_type = payload.get("type", "message")
                 message = payload.get("message", "")
             except Exception:
@@ -87,14 +86,7 @@ async def websocket_endpoint(websocket: WebSocket):
             response = {
                 "type": "response",
                 "message": result["answer"],
-                "sources": [
-                    {
-                        "title": doc.get("metadata", {}).get("article_title", "N/A"),
-                        "topic": doc.get("metadata", {}).get("topic", ""),
-                        "location": doc.get("metadata", {}).get("location_city", ""),
-                    }
-                    for doc in result.get("source_documents", [])
-                ],
+                "sources": result.get("source_documents", []),
             }
             await websocket.send_json(response)
         except Exception as e:
