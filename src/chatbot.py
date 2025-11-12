@@ -28,14 +28,15 @@ class TravelChatbot:
 
     def __init__(
         self,
-        llm_model="llama3.1",
-        embedding_model_name="nomic-embed-text",
-        embedding_model_type="ollama",
-        persist_directory="./chroma_db",
+        llm_model,
+        embedding_model_name,
+        embedding_model_type,
+        persist_directory,
     ):
 
         self.config = Config()
         self.llm_model = llm_model
+        print(f"🔧 Initializing TravelChatbot with LLM: {llm_model}, Embedding")
         self.embedding_model_name = embedding_model_name
         self.embedding_model_type = embedding_model_type
         self.persist_directory = persist_directory
@@ -71,16 +72,8 @@ HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 1. CHỈ trả lời câu hỏi dựa trên thông tin được cung cấp trong context bên dưới.
 2. KHÔNG sử dụng kiến thức ngoài hay tự suy luận.
 3. Trả lời TRỰC TIẾP câu hỏi của người dùng, không lan man hay thêm thắt thông tin không cần thiết.
-
-**QUY TẮC ĐẶC BIỆT - CHỈ ÁP DỤNG KHI NGƯỜI DÙNG HỎI VỀ LỊCH TRÌNH:**
-4. Chỉ khi người dùng hỏi *TRỰC TIẾP* về "lịch trình", "kế hoạch đi chơi", "hành trình", "schedule" → mới được trả lời theo mẫu:
-   "Dạ, hiện tại tôi chưa có lịch trình cụ thể, tuy nhiên dựa trên thông tin có sẵn, tôi gợi ý lịch trình sau:"
-
-5. Nếu người dùng KHÔNG hỏi về lịch trình (ví dụ chỉ hỏi về địa điểm, địa điểm du lịch, món ăn, ăn gì, chơi gì, ở đâu, tham quan...) →
-   **KHÔNG ĐƯỢC dùng cụm từ này**, chỉ liệt kê các thông tin có trong context.
-
-6. Nếu KHÔNG có thông tin liên quan trong context, trả lời: "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm."
-
+4. Nếu KHÔNG có thông tin liên quan trong context, trả lời: "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm."
+5. format câu trả lời rõ ràng, dễ đọc, sử dụng đoạn văn ngắn và danh sách gạch đầu dòng khi cần thiết.
 Trả lời với giọng điệu nhẹ nhàng, thân thiện và am hiểu về các địa điểm du lịch ở Việt Nam.
 
 Context: {context}
@@ -165,62 +158,55 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         parsed = self.query_parser.parse_query(question)
         docs = []
 
-        # --- NỖ LỰC 1: LỌC CHÍNH XÁC (Địa điểm + Loại) ---
         strict_filter = self.query_parser.build_filter_dict(parsed)
-
-        # if strict_filter:
-        #     print(f"🎯 Nỗ lực 1 (Lọc chính xác): {strict_filter}")
-        #     # Dùng .as_retriever() để lọc, đây là cách chuẩn
-        #     strict_retriever = self.vector_store.as_retriever(
-        #         search_type="similarity",  # Dùng similarity search chuẩn
-        #         search_kwargs={"k": self.config.SEARCH_K, "filter": strict_filter},
-        #     )
-        #     docs = strict_retriever.invoke(question)
-
-        # --- NỖ LỰC 2: LỌC DỰ PHÒNG (Chỉ lọc địa điểm, dùng MMR) ---
-        # Điều kiện: (Lọc 1 không thấy) VÀ (câu hỏi có 'type' (ý định) rõ ràng, ví dụ "lịch trình", "ăn gì")
-        if not docs and parsed.get("type"):
-            print(f"   ...Không tìm thấy. Chuyển sang Nỗ lực 2 (Lọc dự phòng).")
-
-            # Tạo bộ lọc dự phòng (chỉ giữ lại địa điểm)
-            fallback_filters = parsed.get("filters", {}).copy()
-            fallback_filters.pop("type", None)  # Bỏ lọc 'type'
-            # (Chúng ta cũng có thể bỏ các filter khác nếu muốn, ví dụ: duration)
-            # fallback_filters.pop("duration", None)
-
-            fallback_where_clause = {}
+        
+        # EFFORT 1: Cố gắng với filter nghiêm ngặt (type + location + region)
+        if strict_filter:
+            print(f"🎯 Nỗ lực 1 (Filter nghiêm ngặt): {strict_filter}")
+            retriever_strict = self.vector_store.as_retriever(
+                search_type="mmr",
+                search_kwargs={
+                    "k": self.config.SEARCH_K,
+                    "fetch_k": 20,
+                    "lambda_mult": 0.6,
+                    "filter": strict_filter,
+                },
+            )
+            docs = retriever_strict.invoke(question)
+        
+        # EFFORT 2: Nếu không tìm được, fallback - chỉ giữ location (bỏ type, region)
+        if not docs and parsed.get("filters"):
+            print(f"   ...Không tìm thấy với filter nghiêm ngặt. Chuyển sang Nỗ lực 2 (Chỉ lọc location).")
+            
+            fallback_filters = {}
+            if parsed["filters"].get("location_specific"):
+                fallback_filters["location_specific"] = parsed["filters"]["location_specific"]
+            elif parsed["filters"].get("location_city"):
+                fallback_filters["location_city"] = parsed["filters"]["location_city"]
+            
             if fallback_filters:
-                # Xây dựng lại filter CHỈ CÒN ĐỊA ĐIỂM
-                temp_parsed = {"filters": fallback_filters}
-                fallback_where_clause = self.query_parser.build_filter_dict(temp_parsed)
-
-            if fallback_where_clause:
-                print(
-                    f"🎯 Nỗ lực 2 (Chỉ lọc địa điểm, dùng MMR): {fallback_where_clause}"
-                )
-
-                # Lỗi TypeError là do similarity_search() không nhận 'search_type'.
-                # Chúng ta PHẢI tạo một retriever mới với as_retriever()
-                fallback_retriever_mmr = self.vector_store.as_retriever(
-                    search_type="mmr",  # Sử dụng MMR
+                fallback_where_clause = {}
+                if fallback_filters.get("location_specific"):
+                    fallback_where_clause = {"location_specific": {"$eq": fallback_filters["location_specific"]}}
+                elif fallback_filters.get("location_city"):
+                    fallback_where_clause = {"location_city": {"$eq": fallback_filters["location_city"]}}
+                
+                print(f"🎯 Nỗ lực 2 (Chỉ lọc location): {fallback_where_clause}")
+                fallback_retriever = self.vector_store.as_retriever(
+                    search_type="mmr",
                     search_kwargs={
                         "k": self.config.SEARCH_K,
                         "fetch_k": 20,
-                        "lambda_mult": 0.7,  # Ưu tiên sự đa dạng
-                        "filter": fallback_where_clause,  # Áp dụng filter địa điểm
+                        "lambda_mult": 0.7,
+                        "filter": fallback_where_clause,
                     },
                 )
-                docs = fallback_retriever_mmr.invoke(question)
-            else:
-                # Nếu câu hỏi là "lịch trình" (ko có địa điểm) -> tìm kiếm bth
-                docs = self.retriever.invoke(
-                    question
-                )  # Dùng retriever MMR mặc định (đã setup trong __init__)
-
-        # Nếu không có filter nào ngay từ đầu (ví dụ: câu hỏi "chào bạn")
-        elif not docs and not strict_filter:
-            print(f"🎯 Nỗ lực 1 (Không có filter): Tìm kiếm cơ bản (dùng MMR).")
-            docs = self.retriever.invoke(question)  # Dùng retriever MMR mặc định
+                docs = fallback_retriever.invoke(question)
+        
+        # EFFORT 3: Nếu vẫn không có, tìm kiếm không filter (chỉ dùng MMR)
+        if not docs:
+            print(f"🎯 Nỗ lực 3 (Không filter, chỉ dùng MMR): Tìm kiếm cơ bản.")
+            docs = self.retriever.invoke(question)
 
         return docs
 
@@ -236,7 +222,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             print(f"🔍 Đang tìm kiếm với câu hỏi: '{question}'")
 
             # Parse query để detect metadata
-            parsed_query = self.query_parser.parse_query(question)
+            # parsed_query = self.query_parser.parse_query(question)
 
             # === THAY ĐỔI NHỎ Ở ĐÂY (DEBUG) ===
             # print(
@@ -278,8 +264,18 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             prompt = self.prompt_template.format(context=context, question=question)
             answer = self.llm.invoke(prompt)
 
-            # Kiểm tra câu trả lời
-            if not answer or "Hiện tại chưa có đủ dữ liệu" in answer:
+            # Kiểm tra xem LLM có refuse không (trả lời ko có data)
+            # Chỉ override nếu LLM thực sự refuse, không phải vì câu trả lời có chứa từ khóa đó
+            refused_responses = [
+                "hiện tại chưa có đủ dữ liệu",
+                "không có thông tin",
+                "tôi không có thông tin",
+                "xin lỗi, tôi không thể",
+            ]
+            
+            is_refused = any(refused_phrase.lower() in answer.lower() for refused_phrase in refused_responses)
+            
+            if not answer or is_refused:
                 return {
                     "answer": "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm.",
                     "source_documents": [],

@@ -18,7 +18,8 @@ from src.config import Config
 
 
 app = FastAPI(title="Travel Chatbot API", version="1.0.0")
-# chatbot = None
+# Global state for current model
+current_model = None
 
 # Serve static files from ui directory
 ui_path = Path("ui")
@@ -30,13 +31,17 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         config = Config()
-        global chatbot
+        global chatbot, current_model
+        
+        # Initialize with config model
         chatbot = TravelChatbot(
             llm_model=config.LLM_MODEL,
             embedding_model_name=config.EMBEDDING_MODEL_NAME,
             embedding_model_type=config.EMBEDDING_MODEL_TYPE,
             persist_directory=config.PERSIST_DIRECTORY,
         )
+        current_model = config.LLM_MODEL  # Track current model state
+        
         if not os.path.exists(config.PERSIST_DIRECTORY):
             chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
         else:
@@ -75,11 +80,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
             try:
                 payload = json.loads(data)
-                message = payload.get('message', '')
-                msg_type = payload.get("type", "message")
                 message = payload.get("message", "")
             except Exception:
-                msg_type = "message"
                 message = data
 
             result = await chatbot.ask_question(message)
@@ -96,24 +98,39 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/api/models")
 async def get_available_models():
     """Get list of available LLM models"""
+    global current_model
     config = Config()
     models = [
         {"name": "llama3.1", "type": "Ollama", "status": "available"},
-        {"name": "qwen3", "type": "Ollama", "status": "available"},
-        {"name": "mistral", "type": "Ollama", "status": "available"},
-        {"name": "neural-chat", "type": "Ollama", "status": "available"},
+        {"name": "qwen3:7b", "type": "Ollama", "status": "available"},
+        {"name": "qwen3:0.6b", "type": "Ollama", "status": "available"},
     ]
-    return {"current": config.LLM_MODEL, "models": models}
+    # Return the current_model state (not config)
+    return {"current": current_model or config.LLM_MODEL, "models": models}
 
 
 @app.post("/api/model/switch")
 async def switch_model(model_name: str):
     """Switch to a different LLM model"""
-    global chatbot
+    global chatbot, current_model
     try:
         config = Config()
-        # Update the chatbot with new model
-        chatbot.llm_model = model_name
+        
+        # Reinitialize chatbot with new model
+        chatbot = TravelChatbot(
+            llm_model=model_name,
+            embedding_model_name=config.EMBEDDING_MODEL_NAME,
+            embedding_model_type=config.EMBEDDING_MODEL_TYPE,
+            persist_directory=config.PERSIST_DIRECTORY,
+        )
+        
+        # Load existing vector store
+        if os.path.exists(config.PERSIST_DIRECTORY):
+            chatbot.load_existing_vector_store()
+        
+        # Update current model state
+        current_model = model_name
+        
         return {
             "status": "success",
             "message": f"Switched to model: {model_name}",

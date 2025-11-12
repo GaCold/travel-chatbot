@@ -102,9 +102,9 @@
 
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
-        <div class="modal-content">
+        <div class="modal-content model-modal">
             <div class="modal-header">
-                <h2>Cài đặt Model LLM</h2>
+                <h2>Chọn Model LLM</h2>
                 <button class="modal-close" id="modalCloseButton">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -112,25 +112,23 @@
                     </svg>
                 </button>
             </div>
-            <div class="modal-body">
-                <div class="model-section">
-                    <h3>Model LLM hiện tại</h3>
-                    <div class="current-model" id="currentModel">
-                        <div class="model-name">Đang tải...</div>
-                    </div>
-                </div>
-                <div class="model-section">
-                    <h3>Danh sách Model có sẵn</h3>
-                    <div class="model-list" id="modelList">
-                        <div class="loading-spinner">
-                            <div class="spinner"></div>
-                            <p>Đang tải danh sách model...</p>
-                        </div>
+            <div class="modal-body model-body">
+                <div class="model-list" id="modelList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <p>Đang tải danh sách model...</p>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-cancel" id="modalCancelButton">Đóng</button>
+            </div>
+            <!-- Loading overlay khi chuyển model -->
+            <div class="model-switching-overlay" id="modelSwitchingOverlay">
+                <div class="switch-loading">
+                    <div class="spinner"></div>
+                    <p>Đang chuyển model...</p>
+                </div>
             </div>
         </div>
     </div>

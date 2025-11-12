@@ -231,22 +231,17 @@ function parseMarkdown(text) {
     if (!text) return '';
 
     return text
-        // Code blocks with backticks
+        .replace(/\n\s*\n+/g, '\n')
         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-        // Inline code with single backticks
         .replace(/`([^`]+)`/g, '<code>$1</code>')
-        // Bold with ** or __
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/__(.*?)__/g, '<strong>$1</strong>')
-        // Italic with * or _
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/_(.*?)_/g, '<em>$1</em>')
-        // Line breaks
-        .replace(/\n/g, '<br>')
-        // Lists (basic support)
-        .replace(/^\s*[\-\*]\s+(.+)$/gm, '<li>$1</li>')
-        // Convert li groups to ul
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        .replace(/(<li>.*?<\/li>)(\s*<li>.*?<\/li>)*/gs, (match) => {
+            return '<ul>' + match + '</ul>';
+        })
+        .replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+        .replace(/(?<!_)_(?!_)(.*?)(?<!_)_(?!_)/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
 }
 
 // Typing animation effect
@@ -407,6 +402,7 @@ function transformTypingToMessage(text, sources = []) {
             topicsList.className = 'topics-list';
             
             for (let i = 1; i < uniqueSources.length && i < 4; i++) {
+                if (!uniqueSources[i].topic) continue;
                 const topic = uniqueSources[i];
                 const topicLink = document.createElement('a');
                 topicLink.href = topic.source_file;
@@ -516,38 +512,32 @@ async function loadModelConfiguration() {
         const response = await fetch('/api/models');
         const data = await response.json();
 
-        displayCurrentModel(data.current || 'llama3.1');
-        await loadAvailableModels(data.models);
+        await loadAvailableModels(data.models, data.current);
     } catch (error) {
         console.error('Error loading model configuration:', error);
         elements.modelList.innerHTML = '<div style="color: #e74c3c; padding: 1rem;">Lỗi tải danh sách model</div>';
     }
 }
 
-function displayCurrentModel(modelName) {
-    if (elements.currentModel) {
-        elements.currentModel.innerHTML = `<div class="model-name">📌 ${modelName}</div>`;
-    }
-}
-
-async function loadAvailableModels(models = null) {
+async function loadAvailableModels(models = null, currentModel = null) {
     if (!elements.modelList) return;
 
     try {
         // Use provided models or mock data
         const modelList = models || [
             { name: 'llama3.1', type: 'Ollama', status: 'available' },
-            { name: 'qwen3', type: 'Ollama', status: 'available' },
-            { name: 'mistral', type: 'Ollama', status: 'available' },
-            { name: 'neural-chat', type: 'Ollama', status: 'available' },
+            { name: 'qwen3:7b', type: 'Ollama', status: 'available' },
+            { name: 'qwen3:0.6b', type: 'Ollama', status: 'available' },
         ];
 
         elements.modelList.innerHTML = '';
 
-        // Get current model to mark as active
-        const response = await fetch('/api/models');
-        const data = await response.json();
-        const currentModel = data.current;
+        // Get current model if not provided
+        if (!currentModel) {
+            const response = await fetch('/api/models');
+            const data = await response.json();
+            currentModel = data.current;
+        }
 
         modelList.forEach(model => {
             const isActive = model.name === currentModel;
@@ -563,7 +553,15 @@ async function loadAvailableModels(models = null) {
                 </div>
             `;
 
-            modelElement.addEventListener('click', () => selectModel(model.name, modelElement));
+            // Disable click nếu là model hiện tại
+            if (!isActive) {
+                modelElement.style.cursor = 'pointer';
+                modelElement.addEventListener('click', () => selectModel(model.name, modelElement));
+            } else {
+                modelElement.style.cursor = 'default';
+                modelElement.style.opacity = '0.7';
+            }
+
             elements.modelList.appendChild(modelElement);
         });
     } catch (error) {
@@ -576,6 +574,20 @@ async function selectModel(modelName, element) {
     try {
         console.log('Selecting model:', modelName);
 
+        // Show loading overlay
+        const modelSwitchingOverlay = document.getElementById('modelSwitchingOverlay');
+        if (modelSwitchingOverlay) {
+            modelSwitchingOverlay.classList.add('active');
+        }
+
+        // Disable all model items and input
+        const allModelItems = document.querySelectorAll('.model-item');
+        allModelItems.forEach(item => {
+            item.style.pointerEvents = 'none';
+            item.style.opacity = '0.5';
+        });
+        disableInput();
+
         // Send request to backend to switch model
         const response = await fetch(`/api/model/switch?model_name=${modelName}`, {
             method: 'POST'
@@ -583,22 +595,64 @@ async function selectModel(modelName, element) {
         const result = await response.json();
 
         if (result.status === 'success') {
-            // Update active state in UI
-            document.querySelectorAll('.model-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            element.classList.add('active');
-
-            // Update current model display
-            displayCurrentModel(modelName);
-
             console.log('Model switched successfully:', modelName);
+
+            // Wait a bit to ensure backend is ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Update active state in UI
+            allModelItems.forEach(item => {
+                item.classList.remove('active');
+                item.style.opacity = '1';
+                item.style.pointerEvents = 'auto';
+                item.style.cursor = 'pointer';
+                // Update checkbox: remove ✓
+                const statusDiv = item.querySelector('.model-item-status');
+                if (statusDiv) {
+                    statusDiv.textContent = '';
+                }
+            });
+            
+            element.classList.add('active');
+            element.style.cursor = 'default';
+            element.style.opacity = '0.7';
+            element.style.pointerEvents = 'none';
+            
+            // Update checkbox for selected model: add ✓
+            const statusDiv = element.querySelector('.model-item-status');
+            if (statusDiv) {
+                statusDiv.textContent = '✓';
+            }
+
+            // Hide loading overlay
+            if (modelSwitchingOverlay) {
+                modelSwitchingOverlay.classList.remove('active');
+            }
+
+            // Re-enable input
+            enableInput();
         } else {
-            alert('Lỗi: ' + result.message);
+            throw new Error(result.message);
         }
     } catch (error) {
         console.error('Error selecting model:', error);
-        alert('Không thể chuyển model. Vui lòng thử lại.');
+
+        // Hide loading overlay on error
+        const modelSwitchingOverlay = document.getElementById('modelSwitchingOverlay');
+        if (modelSwitchingOverlay) {
+            modelSwitchingOverlay.classList.remove('active');
+        }
+
+        // Re-enable items on error
+        const allModelItems = document.querySelectorAll('.model-item');
+        allModelItems.forEach(item => {
+            item.style.pointerEvents = 'auto';
+            item.style.opacity = '1';
+        });
+        enableInput();
+
+        // Show error message
+        addMessage(`❌ Lỗi chuyển model: ${error.message}`, 'bot');
     }
 }
 
@@ -626,15 +680,6 @@ function initializeEventListeners() {
     }
     if (elements.modalCancelButton) {
         elements.modalCancelButton.addEventListener('click', closeSettingsModal);
-    }
-
-    // Close modal when clicking on overlay
-    if (elements.settingsModal) {
-        elements.settingsModal.addEventListener('click', (e) => {
-            if (e.target === elements.settingsModal) {
-                closeSettingsModal();
-            }
-        });
     }
 
     // Enter key to send (Shift+Enter for new line)
@@ -694,26 +739,6 @@ if (document.readyState === 'loading') {
     initialize();
 }
 
-// ==================== Test Functions ====================
-function testTypingIndicator() {
-    // Hide welcome screen
-    if (elements.welcomeScreen && !elements.welcomeScreen.classList.contains('hidden')) {
-        elements.welcomeScreen.classList.add('hidden');
-    }
-
-    // Add user message
-    addMessage('Xin chào! Tôi muốn biết về các địa điểm du lịch ở Hà Nội.', 'user');
-
-    // Show typing indicator
-    showTypingIndicator();
-
-    // Simulate bot response after 3 seconds
-    setTimeout(() => {
-        transformTypingToMessage('Chào bạn! Hà Nội có rất nhiều địa điểm du lịch tuyệt vời như Hồ Hoàn Kiếm, Văn Miếu Quốc Tử Giám, Phố cổ Hà Nội, và nhiều nơi khác. Bạn muốn tìm hiểu chi tiết về địa điểm nào?');
-    }, 3000);
-}
-
 // ==================== Global Functions ====================
 // Make functions available globally for onclick handlers
 window.sendSuggestion = sendSuggestion;
-window.testTypingIndicator = testTypingIndicator;
