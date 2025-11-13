@@ -1,14 +1,10 @@
-#!/usr/bin/env python3
-"""
-Main entry point for Travel Chatbot System
-"""
-
 import os
 import sys
 import uvicorn
+import json
 from typing import List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -59,6 +55,62 @@ async def read_root():
 async def health_check():
     return {"status": "healthy", "service": "Travel Chatbot"}
 
+BASE_DIR = Path(__file__).resolve().parent
+RATING_FILE = "data/rating.json"
+
+@app.post("/rate")
+async def rate_chatbot(request: Request):
+    """Nhận đánh giá 1–5 sao từ người dùng và lưu vào file JSON"""
+    try:
+        data = await request.json()
+        rating = int(data.get("rating", 0))
+        if rating < 1 or rating > 5:
+            return {"status": "error", "message": "Giá trị rating không hợp lệ"}
+
+        # Đọc dữ liệu cũ (nếu có)
+        if os.path.exists(RATING_FILE):
+            with open(RATING_FILE, "r", encoding="utf-8") as f:
+                try:
+                    ratings = json.load(f)
+                except json.JSONDecodeError:
+                    ratings = []
+        else:
+            ratings = []
+
+        # Thêm rating mới
+        ratings.append(rating)
+
+        # Lưu lại
+        os.makedirs(os.path.dirname(RATING_FILE), exist_ok=True)
+        with open(RATING_FILE, "w", encoding="utf-8") as f:
+            json.dump(ratings, f, ensure_ascii=False, indent=2)
+
+        avg = sum(ratings) / len(ratings)
+        print(f"⭐ Nhận đánh giá: {rating} | Trung bình hiện tại: {avg:.2f}")
+
+        return {"status": "success", "average": avg, "total": len(ratings)}
+
+    except Exception as e:
+        print("❌ Lỗi ghi rating:", e)
+        return {"status": "error", "message": str(e)}
+    
+@app.get("/rate")
+def get_rating():
+    """Trả về điểm trung bình và tổng số lượt từ file rating.json"""
+    try:
+        if not os.path.exists(RATING_FILE):
+            return {"average": 0, "total": 0}
+
+        with open(RATING_FILE, "r", encoding="utf-8") as f:
+            ratings = json.load(f)
+            if not isinstance(ratings, list) or not ratings:
+                return {"average": 0, "total": 0}
+
+        avg = sum(ratings) / len(ratings)
+        return {"average": avg, "total": len(ratings)}
+    except Exception as e:
+        print("❌ Lỗi đọc rating:", e)
+        return {"average": 0, "total": 0}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -96,8 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(response)
         except Exception as e:
             await websocket.send_json({"type": "error", "message": f"Lỗi: {e}"})
-
-
+    
 def main():
     """Run the FastAPI server"""
     
