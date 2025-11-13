@@ -102,7 +102,7 @@ async def get_available_models():
     config = Config()
     models = [
         {"name": "llama3.1", "type": "Ollama", "status": "available"},
-        {"name": "qwen3:7b", "type": "Ollama", "status": "available"},
+        {"name": "qwen3:1.7b", "type": "Ollama", "status": "available"},
         {"name": "qwen3:0.6b", "type": "Ollama", "status": "available"},
     ]
     # Return the current_model state (not config)

@@ -324,11 +324,11 @@ function transformTypingToMessage(text, sources = []) {
     if (sources && sources.length > 0) {
         const sourcesContainer = document.createElement('div');
         sourcesContainer.className = 'message-sources';
-        
+
         // Get unique sources (deduplicate by source_file)
         const uniqueSources = [];
         const seenFiles = new Set();
-        
+
         for (const source of sources) {
             if (source.source_file && !seenFiles.has(source.source_file)) {
                 uniqueSources.push(source);
@@ -342,47 +342,51 @@ function transformTypingToMessage(text, sources = []) {
             const firstSource = uniqueSources[0];
             const sourceDiv = document.createElement('div');
             sourceDiv.className = 'source-item';
-            
+
             const sourceLabel = document.createElement('span');
             sourceLabel.className = 'source-label';
             sourceLabel.textContent = '📚: ';
-            
+
             const sourceWrapper = document.createElement('div');
             sourceWrapper.className = 'source-wrapper';
-            
+
             const sourceLink = document.createElement('a');
             sourceLink.href = firstSource.source_file;
             sourceLink.target = '_blank';
             sourceLink.className = 'source-link';
-            sourceLink.textContent =  'Tài liệu tham khảo';
+            sourceLink.textContent = 'Tài liệu tham khảo';
             sourceLink.rel = 'noopener noreferrer';
-            
+
             // Create tooltip with all topics from this source
             const tooltip = document.createElement('div');
             tooltip.className = 'source-tooltip';
-            
+
             const tooltipTitle = document.createElement('div');
             tooltipTitle.className = 'tooltip-title';
             tooltipTitle.textContent = 'Topic:';
             tooltip.appendChild(tooltipTitle);
-            
+
             const tooltipTopics = document.createElement('div');
             tooltipTopics.className = 'tooltip-topics';
-            
-            // Add all topics from all sources with same source_file
+
+            // Add all topics from all sources with same source_file (deduplicate)
+            const seenTopics = new Set();
             for (const source of sources) {
                 if (source.source_file === firstSource.source_file && source.topic) {
-                    const topicItem = document.createElement('div');
-                    topicItem.className = 'tooltip-topic-item';
-                    topicItem.textContent = '• ' + source.topic;
-                    tooltipTopics.appendChild(topicItem);
+                    if (!seenTopics.has(source.topic)) {
+                        seenTopics.add(source.topic);
+                        const topicItem = document.createElement('div');
+                        topicItem.className = 'tooltip-topic-item';
+                        topicItem.textContent = '• ' + source.topic;
+                        tooltipTopics.appendChild(topicItem);
+                    }
                 }
             }
-            
+
             tooltip.appendChild(tooltipTopics);
             sourceWrapper.appendChild(sourceLink);
             sourceWrapper.appendChild(tooltip);
-            
+
             sourceDiv.appendChild(sourceLabel);
             sourceDiv.appendChild(sourceWrapper);
             sourcesContainer.appendChild(sourceDiv);
@@ -392,15 +396,15 @@ function transformTypingToMessage(text, sources = []) {
         if (uniqueSources.length > 1) {
             const topicsDiv = document.createElement('div');
             topicsDiv.className = 'related-topics';
-            
+
             const topicsLabel = document.createElement('div');
             topicsLabel.className = 'topics-label';
             topicsLabel.textContent = 'Các chủ đề liên quan:';
             topicsDiv.appendChild(topicsLabel);
-            
+
             const topicsList = document.createElement('div');
             topicsList.className = 'topics-list';
-            
+
             for (let i = 1; i < uniqueSources.length && i < 4; i++) {
                 if (!uniqueSources[i].topic) continue;
                 const topic = uniqueSources[i];
@@ -412,7 +416,7 @@ function transformTypingToMessage(text, sources = []) {
                 topicLink.rel = 'noopener noreferrer';
                 topicsList.appendChild(topicLink);
             }
-            
+
             topicsDiv.appendChild(topicsList);
             sourcesContainer.appendChild(topicsDiv);
         }
@@ -612,12 +616,12 @@ async function selectModel(modelName, element) {
                     statusDiv.textContent = '';
                 }
             });
-            
+
             element.classList.add('active');
             element.style.cursor = 'default';
             element.style.opacity = '0.7';
             element.style.pointerEvents = 'none';
-            
+
             // Update checkbox for selected model: add ✓
             const statusDiv = element.querySelector('.model-item-status');
             if (statusDiv) {
