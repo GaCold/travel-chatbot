@@ -461,3 +461,110 @@ function testTypingIndicator() {
 // Make functions available globally for onclick handlers
 window.sendSuggestion = sendSuggestion;
 window.testTypingIndicator = testTypingIndicator;
+
+// ==================== Rating System ====================
+
+// Cập nhật giao diện sao và điểm số //
+function updateRatingUI(average, total) {
+    const avgElem = document.getElementById("averageRating");
+    const messageElem = document.getElementById("ratingMessage");
+    const stars = document.querySelectorAll(".star");
+
+    if (!avgElem) return;
+
+    // Đảm bảo average là số
+    const safeAverage = isNaN(average) ? 0 : average;
+
+    if (total > 0) {
+        avgElem.textContent = safeAverage.toFixed(1);
+        messageElem.textContent = `(${total} lượt đánh giá)`;
+        
+        // Tô màu sao dựa trên điểm trung bình (làm tròn)
+        const roundedAvg = Math.round(safeAverage); 
+        stars.forEach((star, index) => {
+            if (index < roundedAvg) {
+                star.classList.add("selected");
+            } else {
+                star.classList.remove("selected");
+            }
+        });
+
+    } else {
+        avgElem.textContent = "--";
+        messageElem.textContent = "";
+        stars.forEach(s => s.classList.remove("selected"));
+    }
+}
+
+
+// Hàm chính để tải điểm trung bình khi trang tải xong//
+async function loadAverageRating() {
+    const avgElem = document.getElementById("averageRating");
+    
+    if (!avgElem) return;
+
+    try {
+        // Gọi endpoint GET /rate để đọc điểm trung bình 
+        const res = await fetch("/rate"); 
+        
+        if (!res.ok) {
+             throw new Error(`Server returned status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        
+        // Cập nhật giao diện
+        updateRatingUI(data.average, data.total);
+        
+
+    } catch (err) {
+        console.error("❌ Lỗi tải rating:", err);
+        avgElem.textContent = "--";
+    }
+}
+
+// Xử lý khi người dùng click chọn sao//
+function setupRatingHandlers() {
+    const stars = document.querySelectorAll(".star");
+    const message = document.getElementById("ratingMessage");
+    
+    stars.forEach(star => {
+        star.addEventListener("click", async () => {
+            const rating = parseInt(star.getAttribute("data-value"));
+            
+            // Tạm thời tô màu sao đang chọn
+            stars.forEach(s => s.classList.remove("selected"));
+            for (let i = 0; i < rating; i++) stars[i].classList.add("selected");
+
+            message.innerText = `Đang gửi đánh giá ${rating} sao...`;
+
+            try {
+                // Gọi endpoint POST /rate để gửi đánh giá
+                const res = await fetch("/rate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rating }),
+                });
+                const data = await res.json();
+
+                if (data.status === "success") {
+                    // Cập nhật UI ngay lập tức với điểm trung bình mới từ server
+                    updateRatingUI(data.average, data.total); 
+                    message.innerText = `Cảm ơn bạn! (${data.total} lượt đánh giá)`;
+                } else {
+                    message.innerText = "Lỗi khi gửi đánh giá! " + (data.message || "");
+                    loadAverageRating(); // Tải lại trung bình cũ nếu gửi thất bại
+                }
+            } catch (err) {
+                console.error("❌ Lỗi gửi rating:", err);
+                message.innerText = "Không thể gửi đánh giá. Vui lòng kiểm tra kết nối.";
+                loadAverageRating(); // Tải lại trung bình cũ nếu gửi thất bại
+            }
+        });
+    });
+}
+// ==================== Bắt đầu khởi chạy Rating khi trang tải xong ====================
+document.addEventListener("DOMContentLoaded", () => {
+    loadAverageRating();
+    setupRatingHandlers();
+});
