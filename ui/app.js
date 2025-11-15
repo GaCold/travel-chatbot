@@ -1,6 +1,6 @@
 // ==================== Configuration ====================
 const CONFIG = {
-    wsUrl: 'ws://localhost:8001/ws',
+    wsUrl: 'ws://localhost:8000/ws',
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
     typingDelay: 50,
@@ -22,6 +22,11 @@ const elements = {
     statusDot: document.getElementById('statusDot'),
     statusText: document.getElementById('statusText'),
     charCount: document.getElementById('charCount'),
+    settingsModal: document.getElementById('settingsModal'),
+    modalCloseButton: document.getElementById('modalCloseButton'),
+    modalCancelButton: document.getElementById('modalCancelButton'),
+    currentModel: document.getElementById('currentModel'),
+    modelList: document.getElementById('modelList'),
 };
 
 // ==================== WebSocket Connection ====================
@@ -60,7 +65,7 @@ function handleWebSocketMessage(event) {
 
         // Transform typing indicator into message
         if (data.type === 'response') {
-            transformTypingToMessage(data.message || data.text);
+            transformTypingToMessage(data.message || data.text, data.sources);
         } else if (data.type === 'error') {
             transformTypingToMessage('Xin lỗi, đã có lỗi xảy ra. Vui lòng thử lại.');
         }
@@ -130,6 +135,7 @@ function sendMessageToServer(message) {
 
     if (isConnected && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
+        disableInput();
         showTypingIndicator();
     } else {
         // Queue message if not connected
@@ -225,22 +231,17 @@ function parseMarkdown(text) {
     if (!text) return '';
 
     return text
-        // Code blocks with backticks
+        .replace(/\n\s*\n+/g, '\n')
         .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-        // Inline code with single backticks
         .replace(/`([^`]+)`/g, '<code>$1</code>')
-        // Bold with ** or __
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/__(.*?)__/g, '<strong>$1</strong>')
-        // Italic with * or _
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/_(.*?)_/g, '<em>$1</em>')
-        // Line breaks
-        .replace(/\n/g, '<br>')
-        // Lists (basic support)
-        .replace(/^\s*[\-\*]\s+(.+)$/gm, '<li>$1</li>')
-        // Convert li groups to ul
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        .replace(/(<li>.*?<\/li>)(\s*<li>.*?<\/li>)*/gs, (match) => {
+            return '<ul>' + match + '</ul>';
+        })
+        .replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+        .replace(/(?<!_)_(?!_)(.*?)(?<!_)_(?!_)/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
 }
 
 // Typing animation effect
@@ -298,13 +299,14 @@ function showTypingIndicator() {
     scrollToBottom();
 }
 
-function transformTypingToMessage(text) {
+function transformTypingToMessage(text, sources = []) {
     const typingContainer = document.getElementById('typing-message-container');
     const bubbleContent = document.getElementById('typing-bubble-content');
 
     if (!typingContainer || !bubbleContent) {
         // Fallback if typing indicator doesn't exist
         addMessage(text, 'bot', false); // Changed to false to show immediately
+        enableInput();
         return;
     }
 
@@ -317,6 +319,110 @@ function transformTypingToMessage(text) {
     // Parse and render markdown content
     const formattedText = parseMarkdown(text);
     bubbleContent.innerHTML = formattedText;
+
+    // Add sources if available
+    if (sources && sources.length > 0) {
+        const sourcesContainer = document.createElement('div');
+        sourcesContainer.className = 'message-sources';
+
+        // Get unique sources (deduplicate by source_file)
+        const uniqueSources = [];
+        const seenFiles = new Set();
+
+        for (const source of sources) {
+            if (source.source_file && !seenFiles.has(source.source_file)) {
+                uniqueSources.push(source);
+                seenFiles.add(source.source_file);
+            }
+        }
+
+        console.log('Unique sources:', uniqueSources);
+        // Show first source as main reference
+        if (uniqueSources.length > 0) {
+            const firstSource = uniqueSources[0];
+            const sourceDiv = document.createElement('div');
+            sourceDiv.className = 'source-item';
+
+            const sourceLabel = document.createElement('span');
+            sourceLabel.className = 'source-label';
+            sourceLabel.textContent = '📚: ';
+
+            const sourceWrapper = document.createElement('div');
+            sourceWrapper.className = 'source-wrapper';
+
+            const sourceLink = document.createElement('a');
+            sourceLink.href = firstSource.source_file;
+            sourceLink.target = '_blank';
+            sourceLink.className = 'source-link';
+            sourceLink.textContent = 'Tài liệu tham khảo';
+            sourceLink.rel = 'noopener noreferrer';
+
+            // Create tooltip with all topics from this source
+            const tooltip = document.createElement('div');
+            tooltip.className = 'source-tooltip';
+
+            const tooltipTitle = document.createElement('div');
+            tooltipTitle.className = 'tooltip-title';
+            tooltipTitle.textContent = 'Topic:';
+            tooltip.appendChild(tooltipTitle);
+
+            const tooltipTopics = document.createElement('div');
+            tooltipTopics.className = 'tooltip-topics';
+
+            // Add all topics from all sources with same source_file (deduplicate)
+            const seenTopics = new Set();
+            for (const source of sources) {
+                if (source.source_file === firstSource.source_file && source.topic) {
+                    if (!seenTopics.has(source.topic)) {
+                        seenTopics.add(source.topic);
+                        const topicItem = document.createElement('div');
+                        topicItem.className = 'tooltip-topic-item';
+                        topicItem.textContent = '• ' + source.topic;
+                        tooltipTopics.appendChild(topicItem);
+                    }
+                }
+            }
+
+            tooltip.appendChild(tooltipTopics);
+            sourceWrapper.appendChild(sourceLink);
+            sourceWrapper.appendChild(tooltip);
+
+            sourceDiv.appendChild(sourceLabel);
+            sourceDiv.appendChild(sourceWrapper);
+            sourcesContainer.appendChild(sourceDiv);
+        }
+
+        // Show additional topics if available
+        if (uniqueSources.length > 1) {
+            const topicsDiv = document.createElement('div');
+            topicsDiv.className = 'related-topics';
+
+            const topicsLabel = document.createElement('div');
+            topicsLabel.className = 'topics-label';
+            topicsLabel.textContent = 'Các chủ đề liên quan:';
+            topicsDiv.appendChild(topicsLabel);
+
+            const topicsList = document.createElement('div');
+            topicsList.className = 'topics-list';
+
+            for (let i = 1; i < uniqueSources.length && i < 4; i++) {
+                if (!uniqueSources[i].topic) continue;
+                const topic = uniqueSources[i];
+                const topicLink = document.createElement('a');
+                topicLink.href = topic.source_file;
+                topicLink.target = '_blank';
+                topicLink.className = 'topic-tag';
+                topicLink.textContent = topic.topic;
+                topicLink.rel = 'noopener noreferrer';
+                topicsList.appendChild(topicLink);
+            }
+
+            topicsDiv.appendChild(topicsList);
+            sourcesContainer.appendChild(topicsDiv);
+        }
+
+        bubbleContent.appendChild(sourcesContainer);
+    }
 
     // Add timestamp
     const timeDiv = document.createElement('div');
@@ -337,6 +443,7 @@ function transformTypingToMessage(text) {
     }, 10);
 
     scrollToBottom();
+    enableInput();
 }
 
 function scrollToBottom() {
@@ -369,6 +476,190 @@ function updateSendButtonState() {
     elements.sendButton.disabled = !hasText || !isConnected;
 }
 
+// ==================== Input State Management ====================
+function disableInput() {
+    elements.messageInput.disabled = true;
+    elements.sendButton.disabled = true;
+    elements.messageInput.style.opacity = '0.6';
+    elements.messageInput.style.cursor = 'not-allowed';
+}
+
+function enableInput() {
+    elements.messageInput.disabled = false;
+    elements.messageInput.style.opacity = '1';
+    elements.messageInput.style.cursor = 'text';
+    updateSendButtonState();
+}
+
+// ==================== Settings Handler ====================
+function handleSettingsClick() {
+    console.log('Settings clicked - LLM Model Configuration');
+    openSettingsModal();
+}
+
+function openSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.add('active');
+        loadModelConfiguration();
+    }
+}
+
+function closeSettingsModal() {
+    if (elements.settingsModal) {
+        elements.settingsModal.classList.remove('active');
+    }
+}
+
+async function loadModelConfiguration() {
+    try {
+        // Fetch current model and available models from backend
+        const response = await fetch('/api/models');
+        const data = await response.json();
+
+        await loadAvailableModels(data.models, data.current);
+    } catch (error) {
+        console.error('Error loading model configuration:', error);
+        elements.modelList.innerHTML = '<div style="color: #e74c3c; padding: 1rem;">Lỗi tải danh sách model</div>';
+    }
+}
+
+async function loadAvailableModels(models = null, currentModel = null) {
+    if (!elements.modelList) return;
+
+    try {
+        // Use provided models or mock data
+        const modelList = models || [
+            { name: 'llama3.1', type: 'Ollama', status: 'available' },
+            { name: 'qwen3:7b', type: 'Ollama', status: 'available' },
+            { name: 'qwen3:0.6b', type: 'Ollama', status: 'available' },
+        ];
+
+        elements.modelList.innerHTML = '';
+
+        // Get current model if not provided
+        if (!currentModel) {
+            const response = await fetch('/api/models');
+            const data = await response.json();
+            currentModel = data.current;
+        }
+
+        modelList.forEach(model => {
+            const isActive = model.name === currentModel;
+            const modelElement = document.createElement('div');
+            modelElement.className = `model-item ${isActive ? 'active' : ''}`;
+            modelElement.innerHTML = `
+                <div class="model-item-name">
+                    ${model.name}
+                    <small style="display: block; color: var(--text-secondary); font-weight: 400; margin-top: 0.25rem;">${model.type}</small>
+                </div>
+                <div class="model-item-status">
+                    ${isActive ? '✓' : ''}
+                </div>
+            `;
+
+            // Disable click nếu là model hiện tại
+            if (!isActive) {
+                modelElement.style.cursor = 'pointer';
+                modelElement.addEventListener('click', () => selectModel(model.name, modelElement));
+            } else {
+                modelElement.style.cursor = 'default';
+                modelElement.style.opacity = '0.7';
+            }
+
+            elements.modelList.appendChild(modelElement);
+        });
+    } catch (error) {
+        console.error('Error loading models:', error);
+        elements.modelList.innerHTML = '<div style="color: #e74c3c; padding: 1rem;">Không thể tải danh sách model</div>';
+    }
+}
+
+async function selectModel(modelName, element) {
+    try {
+        console.log('Selecting model:', modelName);
+
+        // Show loading overlay
+        const modelSwitchingOverlay = document.getElementById('modelSwitchingOverlay');
+        if (modelSwitchingOverlay) {
+            modelSwitchingOverlay.classList.add('active');
+        }
+
+        // Disable all model items and input
+        const allModelItems = document.querySelectorAll('.model-item');
+        allModelItems.forEach(item => {
+            item.style.pointerEvents = 'none';
+            item.style.opacity = '0.5';
+        });
+        disableInput();
+
+        // Send request to backend to switch model
+        const response = await fetch(`/api/model/switch?model_name=${modelName}`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            console.log('Model switched successfully:', modelName);
+
+            // Wait a bit to ensure backend is ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Update active state in UI
+            allModelItems.forEach(item => {
+                item.classList.remove('active');
+                item.style.opacity = '1';
+                item.style.pointerEvents = 'auto';
+                item.style.cursor = 'pointer';
+                // Update checkbox: remove ✓
+                const statusDiv = item.querySelector('.model-item-status');
+                if (statusDiv) {
+                    statusDiv.textContent = '';
+                }
+            });
+
+            element.classList.add('active');
+            element.style.cursor = 'default';
+            element.style.opacity = '0.7';
+            element.style.pointerEvents = 'none';
+
+            // Update checkbox for selected model: add ✓
+            const statusDiv = element.querySelector('.model-item-status');
+            if (statusDiv) {
+                statusDiv.textContent = '✓';
+            }
+
+            // Hide loading overlay
+            if (modelSwitchingOverlay) {
+                modelSwitchingOverlay.classList.remove('active');
+            }
+
+            // Re-enable input
+            enableInput();
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        console.error('Error selecting model:', error);
+
+        // Hide loading overlay on error
+        const modelSwitchingOverlay = document.getElementById('modelSwitchingOverlay');
+        if (modelSwitchingOverlay) {
+            modelSwitchingOverlay.classList.remove('active');
+        }
+
+        // Re-enable items on error
+        const allModelItems = document.querySelectorAll('.model-item');
+        allModelItems.forEach(item => {
+            item.style.pointerEvents = 'auto';
+            item.style.opacity = '1';
+        });
+        enableInput();
+
+        // Show error message
+        addMessage(`❌ Lỗi chuyển model: ${error.message}`, 'bot');
+    }
+}
+
 // ==================== Utility Functions ====================
 function formatTime(date) {
     const hours = date.getHours().toString().padStart(2, '0');
@@ -380,6 +671,20 @@ function formatTime(date) {
 function initializeEventListeners() {
     // Send button click
     elements.sendButton.addEventListener('click', () => sendMessage());
+
+    // Settings button click
+    const settingsButton = document.getElementById('settingsButton');
+    if (settingsButton) {
+        settingsButton.addEventListener('click', handleSettingsClick);
+    }
+
+    // Modal close buttons
+    if (elements.modalCloseButton) {
+        elements.modalCloseButton.addEventListener('click', closeSettingsModal);
+    }
+    if (elements.modalCancelButton) {
+        elements.modalCancelButton.addEventListener('click', closeSettingsModal);
+    }
 
     // Enter key to send (Shift+Enter for new line)
     elements.messageInput.addEventListener('keydown', (e) => {
@@ -438,26 +743,6 @@ if (document.readyState === 'loading') {
     initialize();
 }
 
-// ==================== Test Functions ====================
-function testTypingIndicator() {
-    // Hide welcome screen
-    if (elements.welcomeScreen && !elements.welcomeScreen.classList.contains('hidden')) {
-        elements.welcomeScreen.classList.add('hidden');
-    }
-
-    // Add user message
-    addMessage('Xin chào! Tôi muốn biết về các địa điểm du lịch ở Hà Nội.', 'user');
-
-    // Show typing indicator
-    showTypingIndicator();
-
-    // Simulate bot response after 3 seconds
-    setTimeout(() => {
-        transformTypingToMessage('Chào bạn! Hà Nội có rất nhiều địa điểm du lịch tuyệt vời như Hồ Hoàn Kiếm, Văn Miếu Quốc Tử Giám, Phố cổ Hà Nội, và nhiều nơi khác. Bạn muốn tìm hiểu chi tiết về địa điểm nào?');
-    }, 3000);
-}
-
 // ==================== Global Functions ====================
 // Make functions available globally for onclick handlers
 window.sendSuggestion = sendSuggestion;
-window.testTypingIndicator = testTypingIndicator;

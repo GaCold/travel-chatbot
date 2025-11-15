@@ -34,6 +34,7 @@ model_cache/
 
 # Testing
 test/*
+tests/*
 
 # IDE
 .vscode/
