@@ -22,6 +22,14 @@ from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
 
+# Add repo root to path
+import os
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+from src.config import Config
+
 
 def load_ragas_results(result_file: str = "evaluation/ragas_results.json") -> Dict[str, Any]:
     """Đọc RAGAS results"""
@@ -359,10 +367,16 @@ def print_console_report(results: Dict[str, Any]):
     timestamp = results.get("timestamp", "")
     
     assessment = _get_assessment(overall)
+    config = Config()
     
     print("\n" + "="*70)
     print("📊 RAGAS EVALUATION REPORT")
     print("="*70)
+    
+    # Display configuration
+    print(f"\n⚙️  Configuration:")
+    print(f"  LLM Model: {config.LLM_MODEL}")
+    print(f"  Embedding Model: {config.EMBEDDING_MODEL_NAME} (type: {config.EMBEDDING_MODEL_TYPE})")
     
     print(f"\n📅 Timestamp: {timestamp}")
     print(f"🧪 Test Cases: {num_cases}")
