@@ -121,6 +121,7 @@ def run_evaluation(
     print("\n" + "="*70)
     print("📊 BƯỚC 2: CHẠY EVALUATION (SIMPLIFIED)")
     print("="*70)
+    print(f"   Embedding Model: {Config.EMBEDDING_MODEL_NAME} ({Config.EMBEDDING_MODEL_TYPE})")
     
     # Đọc test_data.json
     input_path = Path(input_file)
@@ -152,7 +153,7 @@ def run_evaluation(
         config = Config()
         embedding_manager = EmbeddingManager(config)
         embeddings = embedding_manager.initialize_embeddings()
-        print(f"✅ Embeddings loaded (AITeamVN/Vietnamese_Embedding_v2)")
+        print(f"✅ Embeddings loaded ({Config.EMBEDDING_MODEL_NAME}, type: {Config.EMBEDDING_MODEL_TYPE})")
     except Exception as e:
         print(f"❌ Error loading embeddings: {e}")
         import traceback
