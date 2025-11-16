@@ -4,18 +4,17 @@ Main entry point for Travel Chatbot System
 """
 
 import os
-import sys
-import uvicorn
+from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import uvicorn
+from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 from src.chatbot import TravelChatbot
 from src.config import Config
-
+from src.log import logger
 
 app = FastAPI(title="Travel Chatbot API", version="1.0.0")
 # Global state for current model
@@ -32,7 +31,7 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
         config = Config()
         global chatbot, current_model
-        
+
         # Initialize with config model
         chatbot = TravelChatbot(
             llm_model=config.LLM_MODEL,
@@ -40,8 +39,8 @@ class ConnectionManager:
             embedding_model_type=config.EMBEDDING_MODEL_TYPE,
             persist_directory=config.PERSIST_DIRECTORY,
         )
-        current_model = config.LLM_MODEL  # Track current model state
-        
+        current_model = config.LLM_MODEL
+
         if not os.path.exists(config.PERSIST_DIRECTORY):
             chatbot.setup_vector_store(config.DATA_DIRECTORY, config.PERSIST_DIRECTORY)
         else:
@@ -115,7 +114,7 @@ async def switch_model(model_name: str):
     global chatbot, current_model
     try:
         config = Config()
-        
+
         # Reinitialize chatbot with new model
         chatbot = TravelChatbot(
             llm_model=model_name,
@@ -123,14 +122,14 @@ async def switch_model(model_name: str):
             embedding_model_type=config.EMBEDDING_MODEL_TYPE,
             persist_directory=config.PERSIST_DIRECTORY,
         )
-        
+
         # Load existing vector store
         if os.path.exists(config.PERSIST_DIRECTORY):
             chatbot.load_existing_vector_store()
-        
+
         # Update current model state
         current_model = model_name
-        
+
         return {
             "status": "success",
             "message": f"Switched to model: {model_name}",
@@ -143,13 +142,13 @@ async def switch_model(model_name: str):
 def main():
     """Run the FastAPI server"""
 
-    print("🚀 Khởi động Travel Chatbot Server...")
-    print("🔧 CẤU HÌNH HỆ THỐNG:")
+    logger.info("Khởi động Travel Chatbot Server...")
+    logger.info("CẤU HÌNH HỆ THỐNG:")
     config = Config()
-    print(f"   LLM Model: {config.LLM_MODEL}")
-    print(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
-    print(f"   Web UI: http://localhost:8000")
-    print(f"   WebSocket: ws://localhost:8000/ws")
+    logger.info(f"   LLM Model: {config.LLM_MODEL}")
+    logger.info(f"   Embedding Model: {config.EMBEDDING_MODEL_NAME}")
+    logger.info(f"   Web UI: http://localhost:8000")
+    logger.info(f"   WebSocket: ws://localhost:8000/ws")
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
 

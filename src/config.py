@@ -15,10 +15,8 @@ class Config:
     """Configuration class for the travel chatbot"""
 
     # Model settings
-    LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1")  # Model cho generation
-    EMBEDDING_MODEL_NAME = os.getenv(
-        "EMBEDDING_MODEL_NAME", "nomic-embed-text"
-    )  # Model cho embedding
+    LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1")
+    EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "nomic-embed-text")
     EMBEDDING_MODEL_TYPE = os.getenv("EMBEDDING_MODEL_TYPE", "ollama")
 
     # HuggingFace model names
@@ -40,11 +38,11 @@ class Config:
     # RAG settings
     CHUNK_SIZE = 1024
     CHUNK_OVERLAP = 100
-    SEARCH_K = 5  # Number of documents retrieved per query
+    SEARCH_K = 5
 
     # Chroma settings
     CHROMA_COLLECTION_NAME = "travel_chatbot_collection"
-    CHROMA_DISTANCE_FUNCTION = "cosine"  # cosine, l2, ip
+    CHROMA_DISTANCE_FUNCTION = "cosine"
 
     MODEL_CACHE_DIR = os.path.join(BASE_DIR, "model_cache")
 

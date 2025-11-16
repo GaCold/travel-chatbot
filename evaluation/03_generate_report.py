@@ -1,29 +1,30 @@
 """
-Bước 3: Tạo báo cáo từ kết quả RAGAS
-======================================
+Step 3: Generate reports from RAGAS results
+=============================================
 
-Script này:
-1. Đọc kết quả từ ragas_results.json (output của bước 2)
-2. Tạo báo cáo dễ hiểu và chi tiết
-3. Xuất dạng:
-   - Console output (in ra terminal)
-   - HTML report (để xem trình duyệt hoặc thêm vào presentation)
-   - JSON summary (dùng cho automation)
+Script performs:
+1. Read results from ragas_results.json (output of step 2)
+2. Create easy-to-understand detailed reports
+3. Export in formats:
+   - Console output (print to terminal)
+   - HTML report (view in browser or add to presentation)
+   - JSON summary (for automation)
 
 Input: evaluation/ragas_results.json
-Output: 
+Output:
    - evaluation/report.html
    - evaluation/report_summary.json
 """
 
 import json
-import sys
-from pathlib import Path
-from typing import Dict, Any
-from datetime import datetime
 
 # Add repo root to path
 import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict
+
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
@@ -31,33 +32,61 @@ if repo_root not in sys.path:
 from src.config import Config
 
 
-def load_ragas_results(result_file: str = "evaluation/ragas_results.json") -> Dict[str, Any]:
-    """Đọc RAGAS results"""
-    
+def load_ragas_results(
+    result_file: str = "evaluation/ragas_results.json",
+) -> Dict[str, Any]:
+    """
+    Load RAGAS evaluation results from JSON file.
+
+    Args:
+        result_file (str): Path to ragas_results.json file.
+
+    Returns:
+        Dict[str, Any]: Parsed results dictionary or None if file not found/readable.
+    """
+
     result_path = Path(result_file)
-    
+
     if not result_path.exists():
-        print(f"❌ File không tìm thấy: {result_file}")
-        print(f"   Hãy chạy bước 2 trước: python evaluation/02_run_ragas_evaluation.py")
+        print(f"❌ File not found: {result_file}")
+        print(f"   Run step 2 first: python evaluation/02_run_ragas_evaluation.py")
         return None
-    
+
     try:
-        with open(result_path, 'r', encoding='utf-8') as f:
+        with open(result_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"❌ Error reading file: {e}")
         return None
 
 
-def create_html_report(results: Dict[str, Any], output_file: str = "evaluation/report.html"):
-    """Tạo HTML report"""
-    
+def create_html_report(
+    results: Dict[str, Any], output_file: str = "evaluation/report.html"
+):
+    """
+    Generate HTML report from evaluation results.
+
+    Creates professional, visually appealing HTML report with:
+    - Header with title and timestamp
+    - Score cards with color coding
+    - Overall assessment banner
+    - Metric explanations
+    - Responsive design for browser viewing
+
+    Args:
+        results (Dict[str, Any]): Results dictionary from load_ragas_results().
+        output_file (str): Path to save HTML report.
+
+    Returns:
+        Path: Path object to created HTML file.
+    """
+
     metrics = results.get("metrics", {})
     overall = results.get("overall_score", 0)
     timestamp = results.get("timestamp", "")
     num_cases = results.get("num_test_cases", 0)
-    
-    # Thang đánh giá màu sắc
+
+    # Color scale for scores
     def get_color(score: float) -> str:
         if score >= 0.8:
             return "#4CAF50"  # Green
@@ -67,7 +96,7 @@ def create_html_report(results: Dict[str, Any], output_file: str = "evaluation/r
             return "#FF9800"  # Orange
         else:
             return "#F44336"  # Red
-    
+
     html_content = f"""
 <!DOCTYPE html>
 <html lang="vi">
@@ -251,13 +280,13 @@ def create_html_report(results: Dict[str, Any], output_file: str = "evaluation/r
             <!-- Metrics Grid -->
             <div class="metrics-grid">
 """
-    
+
     # Add metric cards
     metric_info = {
         "faithfulness": ("Faithfulness", "Độ trung thành với context"),
         "answer_relevancy": ("Answer Relevancy", "Độ liên quan của câu trả lời"),
     }
-    
+
     for metric_key, (metric_name, metric_desc) in metric_info.items():
         score = metrics.get(metric_key, 0)
         color = get_color(score)
@@ -268,25 +297,25 @@ def create_html_report(results: Dict[str, Any], output_file: str = "evaluation/r
                     <div class="score">{score:.1%}</div>
                 </div>
 """
-    
+
     # Add descriptions
     html_content += """
             </div>
             
             <!-- Metric Explanations -->
             <div class="description">
-                <h3>📖 Giải thích các Metric:</h3>
+                <h3>📖 Metric Explanations:</h3>
                 <p>
-                    <strong>Faithfulness (Độ trung thành):</strong> 
-                    Mức độ câu trả lời không bịa thêm, luôn dựa trên context đã cung cấp.
+                    <strong>Faithfulness:</strong> 
+                    How well response stays grounded in provided context, avoiding hallucinations.
                 </p>
                 <p>
-                    <strong>Answer Relevancy (Độ liên quan):</strong> 
-                    Mức độ câu trả lời trả lời đúng câu hỏi, có liên quan trực tiếp.
+                    <strong>Answer Relevancy:</strong> 
+                    How well response directly answers the user's question.
                 </p>
                 <p style="margin-top: 15px; font-size: 0.9em; color: #999; border-top: 1px solid #ddd; padding-top: 10px;">
-                    <strong>Note:</strong> Context Precision & Context Recall yêu cầu ground truth reference, 
-                    không được áp dụng cho hệ thống này vì KB không có Q&A pairs sẵn.
+                    <strong>Note:</strong> Context Precision & Context Recall require ground truth references,
+                    not applicable for this system as KB has no pre-made Q&A pairs.
                 </p>
             </div>
         </div>
@@ -298,135 +327,178 @@ def create_html_report(results: Dict[str, Any], output_file: str = "evaluation/r
 </body>
 </html>
 """
-    
+
     # Lưu HTML
     output_path = Path(output_file)
     output_path.parent.mkdir(exist_ok=True, parents=True)
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
+
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
-    
+
     print(f"💾 HTML Report: {output_path}")
     return output_path
 
 
-def create_summary_json(results: Dict[str, Any], output_file: str = "evaluation/report_summary.json"):
-    """Tạo summary JSON"""
-    
+def create_summary_json(
+    results: Dict[str, Any], output_file: str = "evaluation/report_summary.json"
+):
+    """
+    Generate summary JSON from evaluation results.
+
+    Creates machine-readable summary with metric values, labels, and
+    interpretation guidance. Useful for automation and integration.
+
+    Args:
+        results (Dict[str, Any]): Results dictionary from load_ragas_results().
+        output_file (str): Path to save JSON summary.
+
+    Returns:
+        Path: Path object to created JSON file.
+    """
+
     metrics = results.get("metrics", {})
-    
+
     summary = {
         "timestamp": results.get("timestamp"),
         "num_test_cases": results.get("num_test_cases"),
         "scores": {
             "faithfulness": {
                 "value": metrics.get("faithfulness", 0),
-                "label": "Độ trung thành với context",
-                "interpretation": "Cao hơn tốt hơn (tránh bịa)"
+                "label": "Response alignment with context",
+                "interpretation": "Higher is better (avoid hallucinations)",
             },
             "answer_relevancy": {
                 "value": metrics.get("answer_relevancy", 0),
-                "label": "Độ liên quan của câu trả lời",
-                "interpretation": "Cao hơn = trả lời đúng ý câu hỏi"
+                "label": "Answer relevance to question",
+                "interpretation": "Higher = answers question correctly",
             },
         },
         "overall_score": results.get("overall_score"),
-        "assessment": _get_assessment(results.get("overall_score", 0))
+        "assessment": _get_assessment(results.get("overall_score", 0)),
     }
-    
+
     output_path = Path(output_file)
     output_path.parent.mkdir(exist_ok=True, parents=True)
-    
-    with open(output_path, 'w', encoding='utf-8') as f:
+
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-    
+
     print(f"💾 Summary JSON: {output_path}")
     return output_path
 
 
 def _get_assessment(score: float) -> str:
-    """Đánh giá chung"""
+    """
+    Generate human-readable assessment based on overall score.
+
+    Args:
+        score (float): Overall evaluation score between 0 and 1.
+
+    Returns:
+        str: Assessment label with emoji (e.g., "Excellent 🌟").
+    """
     if score >= 0.85:
-        return "Xuất sắc (Excellent) 🌟"
+        return "Excellent"
     elif score >= 0.75:
-        return "Tốt (Good) ✅"
+        return "Good"
     elif score >= 0.65:
-        return "Khá (Fair) 👍"
-    elif score >= 0.5:
-        return "Trung bình (Average) ⚠️"
+        return "Fair"
+    elif score >= 0.55:
+        return "Average"
     else:
-        return "Cần cải thiện (Needs Improvement) ❌"
+        return "Needs Improvement"
 
 
 def print_console_report(results: Dict[str, Any]):
-    """In báo cáo ra console"""
-    
+    """
+    Print formatted evaluation report to console.
+
+    Displays all evaluation metrics and configuration in human-readable format
+    with ASCII formatting for easy terminal viewing.
+
+    Args:
+        results (Dict[str, Any]): Results dictionary from load_ragas_results().
+
+    Returns:
+        None
+    """
+
     metrics = results.get("metrics", {})
     overall = results.get("overall_score", 0)
     num_cases = results.get("num_test_cases", 0)
     timestamp = results.get("timestamp", "")
-    
+
     assessment = _get_assessment(overall)
     config = Config()
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("📊 RAGAS EVALUATION REPORT")
-    print("="*70)
-    
+    print("=" * 70)
+
     # Display configuration
     print(f"\n⚙️  Configuration:")
     print(f"  LLM Model: {config.LLM_MODEL}")
-    print(f"  Embedding Model: {config.EMBEDDING_MODEL_NAME} (type: {config.EMBEDDING_MODEL_TYPE})")
-    
+    print(
+        f"  Embedding Model: {config.EMBEDDING_MODEL_NAME} (type: {config.EMBEDDING_MODEL_TYPE})"
+    )
+
     print(f"\n📅 Timestamp: {timestamp}")
     print(f"🧪 Test Cases: {num_cases}")
-    
+
     print(f"\n📈 Scores:")
-    print("-"*70)
+    print("-" * 70)
     print(f"  Faithfulness:        {metrics.get('faithfulness', 0):.1%}")
     print(f"  Answer Relevancy:    {metrics.get('answer_relevancy', 0):.1%}")
-    print("-"*70)
+    print("-" * 70)
     print(f"  Overall Score:       {overall:.1%}  ({assessment})")
-    
+
     print(f"\n💡 Recommendations:")
-    if metrics.get('faithfulness', 0) < 0.7:
-        print(f"  • Faithfulness thấp: Cải thiện system prompt, buộc bot chỉ dùng context")
-    if metrics.get('answer_relevancy', 0) < 0.7:
-        print(f"  • Answer Relevancy thấp: Tối ưu prompt để trả lời chính xác hơn")
-    
-    print("\n" + "="*70 + "\n")
+    if metrics.get("faithfulness", 0) < 0.7:
+        print(
+            f"  • Faithfulness is low: Improve system prompt, enforce context-only responses"
+        )
+    if metrics.get("answer_relevancy", 0) < 0.7:
+        print(f"  • Answer Relevancy is low: Optimize prompt for more accurate answers")
+
+    print("\n" + "=" * 70 + "\n")
 
 
 def main():
-    print("\n" + "="*70)
-    print("📊 BƯỚC 3: TẠO BÁOCÁO RAGAS")
-    print("="*70)
-    
-    # Đọc results
+    """
+    Main entry point for report generation.
+
+    Loads evaluation results and generates HTML report, JSON summary,
+    and console output.
+    """
+    print("\n" + "=" * 70)
+    print("📊 STEP 3: GENERATE RAGAS REPORT")
+    print("=" * 70)
+
+    # Load results
     results = load_ragas_results()
     if not results:
-        print("\n❌ Bước 3 thất bại!")
+        print("\n❌ Step 3 failed!")
         sys.exit(1)
-    
-    # In console report
+
+    # Print console report
     print_console_report(results)
-    
-    # Tạo HTML report
+
+    # Create HTML report
     print("📝 Creating HTML report...")
     create_html_report(results)
     print("✅ HTML report created")
-    
-    # Tạo summary JSON
+
+    # Create summary JSON
     print("📝 Creating summary JSON...")
     create_summary_json(results)
     print("✅ Summary JSON created")
-    
-    print("\n" + "="*70)
-    print("✅ Bước 3 hoàn thành!")
+
+    print("\n" + "=" * 70)
+    print("✅ Step 3 completed!")
     print("   Files:")
-    print("   • evaluation/report.html (mở bằng browser)")
-    print("   • evaluation/report_summary.json (dùng cho automation)")
-    print("="*70 + "\n")
+    print("   • evaluation/report.html (open with browser)")
+    print("   • evaluation/report_summary.json (for automation)")
+    print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":

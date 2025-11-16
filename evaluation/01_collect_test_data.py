@@ -1,19 +1,19 @@
 """
-Bước 1: Thu thập dữ liệu đánh giá
-==================================
+Step 1: Collect evaluation data
+===============================
 
-Script này:
-1. Định nghĩa các test cases (câu hỏi)
-2. Gọi chatbot để lấy câu trả lời + retrieved contexts
-3. Lưu kết quả dạng RAGAS format vào file JSON
+Script performs:
+1. Define test cases (questions)
+2. Call chatbot to get answers + retrieved contexts
+3. Save results in RAGAS format to JSON file
 
 Output: evaluation/test_data.json
 Format:
 {
     "test_cases": [
         {
-            "user_input": "Câu hỏi",
-            "response": "Câu trả lời từ bot",
+            "user_input": "Question",
+            "response": "Bot response",
             "retrieved_contexts": ["Context 1", "Context 2", ...],
         },
         ...
@@ -23,10 +23,10 @@ Format:
 
 import asyncio
 import json
-import sys
 import os
+import sys
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 # Add repo root to path
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -36,10 +36,9 @@ if repo_root not in sys.path:
 from src.chatbot import TravelChatbot
 from src.config import Config
 
-
-# ===========================================================================#
-#                           Test cases định sẵn                              #
-# ===========================================================================#
+# ==========================================================================#
+#                         Predefined test cases                             #
+# ==========================================================================#
 
 TEST_CASES = [
     # -------------------------
@@ -95,7 +94,6 @@ TEST_CASES = [
     {"question": "Đặc sản Châu Đốc là gì?"},
     {"question": "Đi Cần Giờ bằng cách nào?"},
     {"question": "Nhà cổ Bình Thủy ở đâu?"},
-
     # -------------------------
     # Regional queries (15)
     # -------------------------
@@ -114,7 +112,6 @@ TEST_CASES = [
     {"question": "Vùng núi Tây Bắc nên đi đâu?"},
     {"question": "Du lịch miền Nam vào tháng 12 có gì?"},
     {"question": "Miền Bắc có món ăn gì ngon?"},
-
     # -------------------------
     # Complex queries (10)
     # -------------------------
@@ -128,7 +125,6 @@ TEST_CASES = [
     {"question": "Huế hay Hội An phù hợp cho nghỉ dưỡng dài ngày?"},
     {"question": "Bãi biển nào đẹp nhất miền Trung?"},
     {"question": "Phú Quốc hay Côn Đảo đẹp hơn?"},
-
     # -------------------------
     # Off-topic (15)
     # -------------------------
@@ -147,7 +143,6 @@ TEST_CASES = [
     {"question": "Làm sao để viết một bài luận?"},
     {"question": "Tắt thông báo email trên iPhone?"},
     {"question": "Có bao nhiêu hành tinh trong hệ mặt trời?"},
-
     # -------------------------
     # Itinerary / Synthesis (10)
     # -------------------------
@@ -160,26 +155,44 @@ TEST_CASES = [
     {"question": "Làm gì trong 1 ngày ở Cần Thơ?"},
     {"question": "Lịch trình 2 ngày ở Ninh Bình."},
     {"question": "Hà Nội – Sa Pa 2 ngày nên đi đâu?"},
-    {"question": "Du lịch tự túc Quảng Bình 3 ngày đi đâu?"}
+    {"question": "Du lịch tự túc Quảng Bình 3 ngày đi đâu?"},
 ]
 
 
 async def collect_test_data(output_file: str = "evaluation/test_data.json"):
     """
-    Thu thập dữ liệu từ chatbot
-    
+    Collect evaluation data by calling chatbot for test cases.
+
+    Iterates through all TEST_CASES, calls the chatbot for each question,
+    retrieves relevant documents and responses, then saves everything
+    in RAGAS format to JSON for later evaluation.
+
     Args:
-        output_file: Path để lưu JSON output
+        output_file (str): Path to save JSON output. Defaults to "evaluation/test_data.json".
+
+    Returns:
+        bool: True if successfully saved, False if errors occurred.
+
+    Side Effects:
+        - Creates output file with test data at output_file path
+        - Prints progress and status messages to console
+        - Logs errors if questions fail to process
+
+    Example:
+        >>> success = await collect_test_data()
+        >>> # Generates evaluation/test_data.json with 90 test cases
     """
-    
-    print("\n" + "="*70)
-    print("📊 BƯỚC 1: THU THẬP DỮ LIỆU ĐÁNH GIÁ")
-    print("="*70)
-    
-    # Khởi tạo chatbot
-    print("\n🤖 Khởi tạo chatbot...")
+
+    print("\n" + "=" * 70)
+    print("📊 STEP 1: COLLECT EVALUATION DATA")
+    print("=" * 70)
+
+    # Initialize chatbot
+    print("\n🤖 Initializing chatbot...")
     print(f"   LLM Model: {Config.LLM_MODEL}")
-    print(f"   Embedding Model: {Config.EMBEDDING_MODEL_NAME} ({Config.EMBEDDING_MODEL_TYPE})")
+    print(
+        f"   Embedding Model: {Config.EMBEDDING_MODEL_NAME} ({Config.EMBEDDING_MODEL_TYPE})"
+    )
     print(f"   Persist Directory: {Config.PERSIST_DIRECTORY}")
     try:
         config = Config()
@@ -187,98 +200,107 @@ async def collect_test_data(output_file: str = "evaluation/test_data.json"):
             llm_model=config.LLM_MODEL,
             embedding_model_name=config.EMBEDDING_MODEL_NAME,
             embedding_model_type=config.EMBEDDING_MODEL_TYPE,
-            persist_directory=config.PERSIST_DIRECTORY
+            persist_directory=config.PERSIST_DIRECTORY,
         )
-        
+
         if not chatbot.load_existing_vector_store():
-            print("❌ Không thể tải vector store")
+            print("❌ Cannot load vector store")
             return False
-        
+
         print("✅ Chatbot initialized")
-    
+
     except Exception as e:
         print(f"❌ Error initializing chatbot: {e}")
         import traceback
+
         traceback.print_exc()
         return False
-    
-    # Thu thập dữ liệu cho mỗi test case
+
+    # Collect data for each test case
     collected_data = []
-    
+
     print(f"\n📝 Processing {len(TEST_CASES)} test cases...")
     print("-" * 70)
-    
+
     for idx, test_case in enumerate(TEST_CASES, 1):
         question = test_case["question"]
         print(f"\n[{idx}/{len(TEST_CASES)}] Question: {question}")
-        
+
         try:
-            # Lấy retrieved contexts (documents)
+            # Get retrieved contexts (documents)
             docs = chatbot._get_relevant_docs(question)
             retrieved_contexts = [doc.page_content for doc in docs] if docs else []
-            
+
             print(f"  📚 Retrieved {len(retrieved_contexts)} contexts")
-            
-            # Lấy response từ chatbot
+
+            # Get response from chatbot
             qa_result = await chatbot.ask_question(question)
             response = qa_result["answer"]
-            
+
             print(f"  ✅ Got response (length: {len(response)} chars)")
             print(f"  Response preview: {response[:100]}...")
-            
-            # Tạo sample cho RAGAS format
+
+            # Create sample in RAGAS format
             sample = {
                 "user_input": question,
                 "response": response,
                 "retrieved_contexts": retrieved_contexts,
             }
-            
+
             collected_data.append(sample)
             print(f"  ✓ Data collected")
-        
+
         except Exception as e:
             print(f"  ❌ Error: {e}")
             import traceback
+
             traceback.print_exc()
-            # Skip this case nhưng tiếp tục
             continue
-    
+
     print("\n" + "-" * 70)
     print(f"✅ Collected {len(collected_data)}/{len(TEST_CASES)} test cases")
-    
-    # Lưu vào file JSON
+
+    # Save to JSON file
     output_path = Path(output_file)
     output_path.parent.mkdir(exist_ok=True, parents=True)
-    
+
     output_data = {
         "test_cases": collected_data,
         "total": len(collected_data),
         "timestamp": __import__("datetime").datetime.now().isoformat(),
     }
-    
+
     try:
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output_data, f, ensure_ascii=False, indent=2)
-        
+
         print(f"\n💾 Saved to: {output_path}")
         print(f"   File size: {output_path.stat().st_size} bytes")
         return True
-    
+
     except Exception as e:
         print(f"❌ Error saving file: {e}")
         return False
 
 
 async def main():
+    """
+    Main entry point for evaluation data collection.
+
+    Calls collect_test_data() and prints completion or failure status.
+
+    Returns:
+        None
+    """
     success = await collect_test_data()
-    
+
     if success:
-        print("\n" + "="*70)
-        print("✅ Bước 1 hoàn thành! File test_data.json đã được tạo.")
-        print("   Bước tiếp theo: python evaluation/02_run_ragas_evaluation.py")
-        print("="*70 + "\n")
+        print("\n" + "=" * 70)
+        print("✅ Step 1 completed! File test_data.json has been created.")
+        print("   Next step: python evaluation/02_run_ragas_evaluation.py")
+        print("=" * 70 + "\n")
     else:
-        print("\n❌ Bước 1 thất bại!")
+        print("\n❌ Step 1 failed!")
         sys.exit(1)
 
 

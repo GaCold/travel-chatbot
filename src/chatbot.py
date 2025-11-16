@@ -1,12 +1,10 @@
-import json
-import logging
 import os
 import sys
 
 import pysqlite3
 
 sys.modules["sqlite3"] = pysqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores import Chroma
@@ -17,9 +15,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.config import Config
 from src.data_loader import DataLoader
 from src.embedding_manager import EmbeddingManager
+from src.log import logger
 from src.query_parser import QueryParser
-
-logger = logging.getLogger(__name__)
 
 
 class TravelChatbot:
@@ -62,7 +59,7 @@ class TravelChatbot:
 
         # Setup prompt template
         self.prompt_template = PromptTemplate.from_template(
-            """<|start_header_id|>system<|end_header_id|>
+            """
 Bạn là một hướng dẫn viên du lịch giàu kinh nghiệm tư vấn cho du khách về các điểm đến, lịch trình và đặc sản ở Việt Nam. 
 HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 
@@ -77,7 +74,7 @@ HÃY TUÂN THỦ NGHIÊM NGẶT CÁC QUY TẮC SAU:
 
 Context: {context}
 Câu hỏi: {question}
-Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+Câu trả lời:"""
         )
 
         logger.info(
@@ -85,7 +82,34 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         )
 
     def setup_vector_store(self, data_directory: str, persist_directory: str):
-        """Thiết lập Chroma vector store từ dữ liệu với metadata filtering"""
+        """
+        Initialize Chroma vector database from documents with metadata filtering.
+
+        Loads documents from JSONL files, splits them into chunks, and creates a
+        Chroma vector store with MMR (Maximal Marginal Relevance) search configured.
+        Stores embeddings persistently for future loads.
+
+        Args:
+            data_directory (str): Path to directory containing JSONL data files.
+            persist_directory (str): Path where Chroma DB will be persisted.
+
+        Returns:
+            None
+
+        Raises:
+            ValueError: If no documents found in data_directory.
+            Exception: Any error during vector store creation is logged and re-raised.
+
+        Side Effects:
+            - Initializes self.vector_store (Chroma instance)
+            - Initializes self.retriever (MMR retriever with metadata filtering)
+            - Initializes self.qa_chain (LangChain pipeline for Q&A)
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> chatbot.setup_vector_store("./data", "./chroma_db")
+            >>> # Now ready to call ask_question()
+        """
         try:
             # Load documents
             documents = self.data_loader.load_all_data(data_directory)
@@ -96,7 +120,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             logger.info(f"Total documents loaded: {len(documents)}")
             documents = self.text_splitter.split_documents(documents)
 
-            # Tạo Chroma vector store với metadata
+            # Create Chroma vector store with metadata
             self.vector_store = Chroma.from_documents(
                 documents=documents,
                 embedding=self.embeddings,
@@ -107,24 +131,19 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 },
             )
 
-            print(f"✅ Đã tạo Chroma vector store tại: {persist_directory}")
+            logger.info(f"✅ Đã tạo Chroma vector store tại: {persist_directory}")
 
-            # Create retriever - sẽ được custom trong ask_question với filter
+            # Create retriever -will be customized in ask_question with filter
             self.retriever = self.vector_store.as_retriever(
                 search_type="mmr",
                 search_kwargs={
-                    "k": self.config.SEARCH_K,  # Số lượng doc trả về (ví dụ: 4)
-                    "fetch_k": 10,  # Lấy 20 doc, sau đó MMR chọn 4 doc đa dạng nhất
-                    "lambda_mult": 0.6,  # 0.5 = cân bằng, > 0.5 = ưu tiên đa dạng (diversity)
+                    "k": self.config.SEARCH_K,
+                    "fetch_k": 10,
+                    "lambda_mult": 0.6,
                 },
             )
 
-            # Test retriever
-            print("🧪 Test retriever ngay sau khi tạo...")
-            test_docs = self.retriever.invoke("Cần Thơ")
-            print(f"✅ Retriever test: tìm thấy {len(test_docs)} documents")
-
-            # Create QA chain - sẽ dùng custom retrieval trong ask_question
+            # Create QA chain - will use custom retrieval in ask_question
             self.qa_chain = (
                 {
                     "context": lambda x: self._get_relevant_docs(x),
@@ -141,14 +160,49 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
         except Exception as e:
             logger.error(f"Error setting up vector store: {e}")
-            print(f"❌ Lỗi khi setup vector store: {e}")
             import traceback
 
             traceback.print_exc()
             raise
-    
+
     def _get_relevant_docs(self, question: str):
-        """Lấy documents liên quan với chiến lược fallback filtering."""
+        """
+        Retrieve relevant documents using fallback filtering strategy.
+
+        Implements a multi-level retrieval approach:
+
+        EFFORT 1 - Specific Location Filter:
+        - Extract location_specific or location_city from question
+        - Search with exact location match (highest precision)
+        - Returns if results have high similarity
+
+        EFFORT 2 - Regional Filter Fallback:
+        - If Effort 1 returns nothing, try broader region filter
+        - Extract detected region (miền bắc, miền trung, miền nam)
+        - Search within entire region
+
+        EFFORT 3 - Unrestricted Search:
+        - If still no results, search entire database (no filters)
+        - Uses MMR scoring to maximize result diversity
+
+        Similarity Filtering:
+        - All results below similarity threshold are filtered out
+        - Default threshold: 0.3 (configurable)
+        - Prevents low-confidence results
+
+        Args:
+            question (str): User's question for which to find relevant documents.
+
+        Returns:
+            list: List of relevant LangChain Document objects with metadata.
+                Returns empty list if no documents found or all below threshold.
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> docs = chatbot._get_relevant_docs("Hà Nội có gì chơi?")
+            >>> len(docs)  # Number of relevant documents retrieved
+            >>> docs[0].page_content  # First document's content
+        """
         if not self.vector_store:
             return []
 
@@ -159,14 +213,16 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
         if parsed.get("filters"):
             filters = parsed["filters"]
             effort1_filter = None
-            
+
             if filters.get("location_specific"):
-                effort1_filter = {"location_specific": {"$eq": filters["location_specific"]}}
+                effort1_filter = {
+                    "location_specific": {"$eq": filters["location_specific"]}
+                }
             elif filters.get("location_city"):
                 effort1_filter = {"location_city": {"$eq": filters["location_city"]}}
-            
+
             if effort1_filter:
-                print(f"🎯 Nỗ lực 1 (Lọc location cụ thể): {effort1_filter}")
+                logger.info(f"🎯 Effort 1 (Filter specific location): {effort1_filter}")
                 retriever1 = self.vector_store.as_retriever(
                     search_type="mmr",
                     search_kwargs={
@@ -177,12 +233,14 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                     },
                 )
                 docs = retriever1.invoke(question)
-        
-        # EFFORT 2: Nếu không tìm được location cụ thể, thử filter region
+
+        # EFFORT 2: If you can't find a specific location, try filtering region
         if not docs and parsed.get("region"):
-            print(f"   ...Không tìm thấy với location cụ thể. Chuyển sang Nỗ lực 2 (Lọc theo region).")
+            logger.info(
+                f"   ...Không tìm thấy với location cụ thể. Chuyển sang Nỗ lực 2 (Lọc theo region)."
+            )
             region_filter = {"region": {"$eq": parsed["region"]}}
-            print(f"🎯 Nỗ lực 2 (Lọc region): {region_filter}")
+            logger.info(f"🎯 Nỗ lực 2 (Lọc region): {region_filter}")
             retriever2 = self.vector_store.as_retriever(
                 search_type="mmr",
                 search_kwargs={
@@ -193,27 +251,72 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 },
             )
             docs = retriever2.invoke(question)
-        
-        # EFFORT 3: Nếu vẫn không có, tìm kiếm không filter nhưng kiểm tra similarity score
+
+        # EFFORT 3: If still no results, perform unfiltered search but check similarity score
         if not docs:
-            print(f"🎯 Nỗ lực 3 (Tìm kiếm cơ bản với kiểm tra độ tương đồng).")
-            # Sử dụng similarity_search_with_score để lấy kèm score
-            results_with_scores = self.vector_store.similarity_search_with_score(question, k=self.config.SEARCH_K)
-            
-            # Lọc bỏ các kết quả có score quá cao (< 0.5) = không liên quan
-            # Score nhỏ = tương đồng cao, score lớn = tương đồng thấp
+            logger.info(f"🎯 Effort 3 (Basic search with similarity check).")
+            # Use similarity_search_with_score to get scores
+            results_with_scores = self.vector_store.similarity_search_with_score(
+                question, k=self.config.SEARCH_K
+            )
+
+            # Filter out results with too high score (> 0.5) = not relevant
+            # Lower score = higher similarity, higher score = lower similarity
             similarity_threshold = 0.5
-            docs = [doc for doc, score in results_with_scores if score < similarity_threshold]
-            
+            docs = [
+                doc
+                for doc, score in results_with_scores
+                if score < similarity_threshold
+            ]
+
             if not docs:
-                print(f"   ⚠️ Tất cả kết quả đều có độ tương đồng thấp (score > {similarity_threshold}). Không trả lại documents.")
+                logger.warning(
+                    f"   ⚠️ All results have low similarity (score > {similarity_threshold}). Not returning documents."
+                )
             else:
-                print(f"   ✅ Tìm thấy {len(docs)} documents có độ tương đồng cao (score < {similarity_threshold})")
+                logger.info(
+                    f"   ✅ Found {len(docs)} documents with high similarity (score < {similarity_threshold})"
+                )
 
         return docs
 
     async def ask_question(self, question: str) -> Dict[str, Any]:
-        """Hỏi câu hỏi và nhận câu trả lời với metadata filtering"""
+        """
+        Process user question and generate answer using RAG (Retrieval-Augmented Generation).
+
+        Workflow:
+        1. Retrieve relevant documents using _get_relevant_docs() with metadata filtering
+        2. Build context from retrieved documents' content
+        3. Format prompt with context and question
+        4. Call LLM to generate answer based on context only
+        5. Detect LLM refusals and provide standardized "no data" response
+        6. Return answer with source document references
+
+        Refusal Detection:
+        - Checks if LLM returned standard refusal phrases
+        - Examples: "không có dữ liệu", "không có thông tin", "tôi không thể"
+        - Ensures consistent "no data" messaging to users
+
+        Args:
+            question (str): User's question to answer.
+
+        Returns:
+            Dict[str, Any]: Response dictionary with:
+                - "answer" (str): Generated answer from LLM or standardized no-data message
+                - "source_documents" (list): List of source document references with:
+                    - "topic" (str): Document topic/category
+                    - "source_file" (str): Original JSONL filename
+
+        Raises:
+            ValueError: If vector store not initialized.
+            Exception: Caught and logged; returns error message to user.
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> result = await chatbot.ask_question("Huế có gì chơi?")
+            >>> print(result["answer"])
+            >>> print(result["source_documents"][0]["topic"])
+        """
         if not self.vector_store:
             raise ValueError(
                 "Vector store chưa được khởi tạo. Hãy gọi setup_vector_store() trước."
@@ -221,15 +324,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
 
         try:
             logger.info(f"Processing question: {question}")
-            print(f"🔍 Đang tìm kiếm với câu hỏi: '{question}'")
-            relevant_docs = self._get_relevant_docs(question)  # Chỉ cần truyền question
-            print(f"   Found {len(relevant_docs)} relevant document(s)")
-            print("📝 Relevant Documents Metadata:")
-            for doc in relevant_docs:
-                print(f"   - Topic: {doc.metadata.get('topic', 'N/A')}")
-                print(f"     Source File: {doc.metadata.get('source_file', 'N/A')}")
-            print("-----")
-            # Nếu không có document liên quan
+            relevant_docs = self._get_relevant_docs(question)
             if not relevant_docs:
                 print("❌ Không tìm thấy document nào liên quan")
                 return {
@@ -252,9 +347,12 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 "tôi không có thông tin",
                 "xin lỗi, tôi không thể",
             ]
-            
-            is_refused = any(refused_phrase.lower() in answer.lower() for refused_phrase in refused_responses)
-            
+
+            is_refused = any(
+                refused_phrase.lower() in answer.lower()
+                for refused_phrase in refused_responses
+            )
+
             if not answer or is_refused:
                 return {
                     "answer": "Hiện tại chưa có đủ dữ liệu về vấn đề này. Vui lòng liên hệ bộ phận hỗ trợ để được tư vấn thêm.",
@@ -266,7 +364,7 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
                 "source_documents": [
                     {
                         "topic": doc.metadata.get("topic", "N/A"),
-                        "source_file" : doc.metadata.get("source_file", "N/A"),
+                        "source_file": doc.metadata.get("source_file", "N/A"),
                     }
                     for doc in relevant_docs
                 ],
@@ -282,7 +380,33 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             }
 
     def load_existing_vector_store(self):
-        """Tải Chroma vector store đã tồn tại"""
+        """
+        Load previously persisted Chroma vector store from disk.
+
+        Attempts to load an existing Chroma database from persist_directory.
+        Reinitializes retriever and QA chain for immediate use.
+        This is the typical startup path when vector store already exists
+        (avoiding expensive re-indexing).
+
+        Args:
+            None
+
+        Returns:
+            bool: True if successfully loaded, False if failed or directory not found.
+
+        Side Effects:
+            - Sets self.vector_store to loaded Chroma instance
+            - Recreates self.retriever with MMR configuration
+            - Recreates self.qa_chain pipeline
+            - Prints status messages to console
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> if chatbot.load_existing_vector_store():
+            ...     answer = await chatbot.ask_question("Hà Nội có gì?")
+            ... else:
+            ...     print("Need to setup vector store first")
+        """
         try:
             persist_directory = self.config.PERSIST_DIRECTORY
 
@@ -333,7 +457,33 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             return False
 
     def check_vector_store_status(self):
-        """Kiểm tra trạng thái của Chroma vector store"""
+        """
+        Verify Chroma vector store is properly initialized and operational.
+
+        Performs comprehensive diagnostic checks:
+        - Vector store instantiation status
+        - Persistent directory existence and accessibility
+        - Test similarity search ("du lịch" query)
+        - Document count in collection
+        - Retriever functionality
+        - QA chain initialization
+
+        Useful for debugging deployment and setup issues.
+        Prints detailed status messages to console.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if all checks pass, False if any issue detected.
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> if chatbot.check_vector_store_status():
+            ...     print("Ready for production")
+            ... else:
+            ...     print("Setup needed or errors detected")
+        """
         try:
             if not self.vector_store:
                 print("❌ Vector store: Chưa được khởi tạo")
@@ -395,7 +545,38 @@ Câu trả lời:<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
             return False
 
     def get_vector_store_info(self):
-        """Lấy thông tin chi tiết về Chroma vector store"""
+        """
+        Retrieve metadata and configuration information about vector store.
+
+        Returns structured information about the Chroma database:
+        - Status (active, not_initialized, or error message)
+        - Database type (always "Chroma" for this implementation)
+        - Persistent storage directory path
+        - Whether directory exists on disk
+        - Total number of documents in collection
+        - Collection name configuration
+
+        Useful for logging, monitoring, and API responses.
+        Does not perform heavy operations like test searches.
+
+        Args:
+            None
+
+        Returns:
+            Dict[str, Any]: Information dictionary with keys:
+                - "status" (str): "active", "not_initialized", or "error: {message}"
+                - "type" (str): "Chroma"
+                - "persist_directory" (str): Path to storage
+                - "exists" (bool): Whether directory exists
+                - "document_count" (int): Total indexed documents (or "unknown")
+                - "collection_name" (str): Name of Chroma collection
+
+        Example:
+            >>> chatbot = TravelChatbot(...)
+            >>> info = chatbot.get_vector_store_info()
+            >>> print(f"Status: {info['status']}")
+            >>> print(f"Documents: {info['document_count']}")
+        """
         try:
             if not self.vector_store:
                 return {"status": "not_initialized"}

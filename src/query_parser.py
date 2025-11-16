@@ -3,15 +3,11 @@ from typing import Dict, List, Optional, Tuple
 
 
 class QueryParser:
-    """
-    Parser để trích xuất metadata từ câu hỏi,
-    ĐƯỢC TỐI ƯU VÀ ĐỒNG BỘ với cấu trúc metadata của vnexpress.jsonl.
-    """
 
     def __init__(self):
 
-        # 1. ÁNH XẠ TYPE: Map từ khóa của user -> metadata 'type' trong JSONL
-        # (Đã kiểm tra và khớp với metadata của bạn: "overview", "transport", "cost", "attraction", "food", v.v.)
+        # 1. TYPE MAPPING: Map user keywords -> metadata 'type' in JSONL
+        # (Checked and matches your metadata: "overview", "transport", "cost", "attraction", "food", etc.)
         self.type_keywords_map = {
             "food": ["ăn", "ẩm thực", "món", "đặc sản", "quán", "nhà hàng"],
             "attraction": [
@@ -23,7 +19,7 @@ class QueryParser:
                 "đi đâu",
                 "chỗ nào đẹp",
                 "khám phá",
-            ],  # Gộp "khám phá" vào đây
+            ],
             "accommodation": [
                 "lưu trú",
                 "ở đâu",
@@ -48,25 +44,24 @@ class QueryParser:
             "tips": ["lưu ý", "mẹo", "kinh nghiệm", "chú ý"],
             "activity": ["hoạt động", "vui chơi", "trải nghiệm"],
             "overview": ["tổng quan", "giới thiệu", "thông tin chung", "về"],
-            # Gộp "cẩm nang" vào "guide"
             "guide": ["cẩm nang", "thời tiết", "mùa nào đẹp", "nên đi khi nào"],
             "itinerary": ["lịch trình", "kế hoạch", "2 ngày", "3 ngày"],
         }
 
-        # 2. ÁNH XẠ REGION: Map từ khóa user -> metadata 'region' trong JSONL
-        # (Đã kiểm tra và khớp: "miền bắc", "miền trung", "miền nam")
+        # 2. REGION MAPPING: Map user keywords -> metadata 'region' in JSONL
+        # (Checked and matches: "miền bắc", "miền trung", "miền nam")
         self.region_keywords_map = {
             "miền bắc": ["miền bắc", "phía bắc", "bắc bộ"],
             "miền trung": ["miền trung", "trung bộ", "duyên hải"],
             "miền nam": ["miền nam", "nam bộ", "miền tây", "đông nam bộ"],
         }
 
-        # 3. ÁNH XẠ LOCATION: Map từ khóa user -> metadata 'location_city' và 'location_specific'
-        # [QUAN TRỌNG] Danh sách này được xây dựng 100% từ file vnexpress.jsonl của bạn.
-        # (Key chuẩn trong JSONL): ( (list từ khóa user), (loại key: 'location_city' hoặc 'location_specific') )
+        # 3. LOCATION MAPPING: Map user keywords -> metadata 'location_city' and 'location_specific'
+        # [IMPORTANT] This list is built 100% from your vnexpress.jsonl file.
+        # (Standard key in JSONL): ( (list of user keywords), (key type: 'location_city' or 'location_specific') )
 
         self.location_map = {
-            # ===== MIỀN BẮC (TỪ FILE JSONL) =====
+            # ===== NORTHERN REGION (FROM JSONL FILE) =====
             "vinh_ha_long_4626380": (
                 ["vịnh hạ long", "hạ long", "halong"],
                 "location_specific",
@@ -85,7 +80,7 @@ class QueryParser:
             "ta_xua_4656282": (["tà xùa"], "location_city"),
             "ha_noi_4459188": (["hà nội", "hanoi"], "location_city"),
             "ha_giang": (["hà giang"], "location_city"),
-            # ===== MIỀN TRUNG (TỪ FILE JSONL) =====
+            # ===== MIỀN TRUNG (FROM FILE JSONL) =====
             "ba_na_hills": (["bà nà", "ba na hills", "cầu vàng"], "location_specific"),
             "cu_lao_xanh_4598306": (["cù lao xanh"], "location_specific"),
             "cu_lao_cham_4751193": (["cù lao chàm"], "location_specific"),
@@ -134,7 +129,7 @@ class QueryParser:
             "hue_4126937": (["huế", "thừa thiên huế"], "location_city"),
             "thanh_hoa_4607348": (["thanh hóa", "thanh hoa"], "location_city"),
             "bao_loc_4643396": (["bảo lộc"], "location_city"),
-            # ===== MIỀN NAM (TỪ FILE JSONL) =====
+            # ===== MIỀN NAM (FROM FILE JSONL) =====
             "con_dao_4445727": (["côn đảo"], "location_specific"),
             "can_gio_4673430": (["cần giờ"], "location_specific"),
             "nam_du_4764453": (["nam du", "đảo nam du"], "location_specific"),
@@ -183,7 +178,33 @@ class QueryParser:
 
     def parse_query(self, question: str) -> Dict[str, any]:
         """
-        Phân tích câu hỏi và trích xuất metadata (region, type, location_city, location_specific)
+        Parse user question and extract metadata filters.
+
+        Analyzes the input question to detect and extract relevant metadata including:
+        - Region: Geographical areas (miền bắc, miền trung, miền nam)
+        - Type: Content categories (food, attraction, transport, cost, etc.)
+        - Location: Specific destinations or cities
+
+        Args:
+            question (str): User's raw question input.
+
+        Returns:
+            Dict[str, any]: Dictionary containing:
+                - region: Detected region (str or None)
+                - type: Detected content type (str or None)
+                - location_city: Detected city location (str or None)
+                - location_specific: Detected specific location (str or None)
+                - original_query: Original user question
+                - cleaned_query: Processed question
+                - filters: Dictionary of detected metadata for filtering
+
+        Example:
+            >>> parser = QueryParser()
+            >>> result = parser.parse_query("Đà Nẵng có những cây cầu nào?")
+            >>> result['location_city']
+            'da_nang'
+            >>> result['type']
+            'attraction'
         """
         question_lower = question.lower()
 
@@ -211,8 +232,8 @@ class QueryParser:
             result["region"] = detected_region
             result["filters"]["region"] = detected_region
 
-        # 3. Detect Location (city và specific)
-        # ƯU TIÊN 1: Tìm 'location_specific' trước (ví dụ: "bà nà", "pù luông")
+        # 3. Detect Location (city and specific)
+        # PRIORITY 1: Find 'location_specific' first (e.g., "bà nà", "pù luông")
         detected_loc_specific = self._detect_location(
             question_lower, "location_specific"
         )
@@ -220,12 +241,12 @@ class QueryParser:
             result["location_specific"] = detected_loc_specific
             result["filters"]["location_specific"] = detected_loc_specific
 
-        # ƯU TIÊN 2: Nếu không thấy specific, mới tìm 'location_city' (ví dụ: "đà nẵng", "hà nội")
-        # Logic này ngăn việc hỏi "Bà Nà có gì chơi" chỉ trả về bài "Đà Nẵng"
+        # PRIORITY 2: If no specific location found, then detect 'location_city' (e.g., "đà nẵng", "hà nội")
+        # This logic prevents queries like "Bà Nà có gì chơi" from only returning "Đà Nẵng"
         detected_loc_city = self._detect_location(question_lower, "location_city")
         if detected_loc_city:
             result["location_city"] = detected_loc_city
-            # Chỉ thêm filter city NẾU CHƯA có filter specific
+            # Only add city filter IF specific filter is NOT available
             if not detected_loc_specific:
                 result["filters"]["location_city"] = detected_loc_city
 
@@ -234,30 +255,68 @@ class QueryParser:
     def _detect_from_map(
         self, text: str, keyword_map: Dict[str, List[str]]
     ) -> Optional[str]:
-        """Hàm chung để detect (type, region) từ map, ưu tiên từ khóa dài nhất"""
+        """
+        Detect metadata from text using keyword mapping with longest-match priority.
+
+        Internal method that searches for keywords in text against a provided map.
+        When multiple keywords match, prioritizes the longest one for more accurate detection.
+        Used for detecting types (food, attraction) and regions (miền bắc, miền trung).
+
+        Args:
+            text (str): Input text to search (typically lowercase question).
+            keyword_map (Dict[str, List[str]]): Mapping of metadata keys to keyword lists.
+                Format: {"key": ["keyword1", "keyword2", ...]}
+
+        Returns:
+            Optional[str]: Detected metadata key if found, None otherwise.
+
+        Example:
+            >>> type_map = {"food": ["ăn", "ẩm thực"], "attraction": ["tham quan"]}
+            >>> parser._detect_from_map("tôi muốn đi tham quan", type_map)
+            'attraction'
+        """
         matches = []
         for map_key, keywords in keyword_map.items():
             for keyword in keywords:
                 if keyword in text:
-                    # Ưu tiên từ khóa dài hơn (khớp chính xác hơn)
+                    # Prioritize longer keywords (more accurate match)
                     matches.append((map_key, len(keyword)))
 
         if matches:
             matches.sort(key=lambda x: x[1], reverse=True)
-            return matches[0][0]  # Trả về map_key (ví dụ: "food", "miền bắc")
+            return matches[0][0]  # Return map_key (e.g., "food", "miền bắc")
         return None
 
     def _detect_location(self, text: str, loc_type: str) -> Optional[str]:
         """
-        Hàm detect location (city hoặc specific), ưu tiên từ khóa dài nhất
-        loc_type: 'location_city' hoặc 'location_specific'
+        Detect location from text with word boundary matching and longest-match priority.
+
+        Searches for location keywords in text, matching whole words only to prevent
+        partial matches (e.g., "hà" from "hà giang" should not match "hà nội").
+        When multiple locations match, prioritizes the longest keyword.
+
+        Args:
+            text (str): Input text to search (typically lowercase question).
+            loc_type (str): Type of location to detect - either 'location_city' or 'location_specific'.
+                - 'location_city': Broader city/province level (e.g., 'da_nang', 'ha_noi')
+                - 'location_specific': More specific landmarks/attractions (e.g., 'ba_na_hills', 'phu_quy')
+
+        Returns:
+            Optional[str]: Standardized location key if found, None otherwise.
+
+        Example:
+            >>> parser = QueryParser()
+            >>> parser._detect_location("vịnh hạ long đẹp lắm", "location_specific")
+            'vinh_ha_long_4626380'
+            >>> parser._detect_location("đà nẵng du lịch", "location_city")
+            'da_nang'
         """
         matches = []
         for map_key, (keywords, key_type) in self.location_map.items():
             if key_type == loc_type:
                 for keyword in keywords:
-                    # Thêm khoảng trắng để tránh khớp 1 phần (ví dụ: "hà" trong "hà giang" khớp với "hà nội")
-                    # Bằng cách tìm " hà nội " hoặc "hà nội " hoặc " hà nội"
+                    # Add word boundaries to avoid partial matches (e.g., "hà" in "hà giang" matching "hà nội")
+                    # By searching for " hà nội " or "hà nội " or " hà nội"
                     if re.search(r"\b" + re.escape(keyword) + r"\b", text):
                         matches.append((map_key, len(keyword)))
 
@@ -265,16 +324,37 @@ class QueryParser:
             matches.sort(key=lambda x: x[1], reverse=True)
             return matches[0][
                 0
-            ]  # Trả về map_key chuẩn (ví dụ: "da_nang", "ba_na_hills")
+            ]  # Returns the standard map_key (e.g. "da_nang", "ba_na_hills")
         return None
 
     def build_filter_dict(self, parsed_query: Dict) -> Optional[Dict]:
         """
-        Xây dựng filter dict cho Chroma DỰA TRÊN CÁC KEY CHUẨN (metadata)
+        Build Chroma vector database filter dictionary from parsed query metadata.
+
+        Converts extracted metadata (region, type, location) into a filter dict
+        compatible with Chroma's filtering syntax. Applies logic:
+        - If 'location_specific' exists, use it (more specific takes priority)
+        - Otherwise use 'location_city' if available
+        - Combine multiple filters with $and operator
+
+        Args:
+            parsed_query (Dict): Output from parse_query() containing detected metadata.
+                Expected keys: 'filters' dict with 'region', 'type', 'location_specific', 'location_city'.
+
+        Returns:
+            Optional[Dict]: Chroma filter dict or None if no filters detected.
+                Single filter: {"field": {"$eq": "value"}}
+                Multiple filters: {"$and": [{"filter1": ...}, {"filter2": ...}]}
+                No filters: None
+
+        Example:
+            >>> parsed = parser.parse_query("Hà Nội ăn gì ngon?")
+            >>> filters = parser.build_filter_dict(parsed)
+            >>> # Returns: {"$and": [{"region": {"$eq": "miền bắc"}}, {"type": {"$eq": "food"}}, ...]}
         """
         filters = []
 
-        # Sử dụng dict "filters" đã được xây dựng cẩn thận trong parse_query
+        # Use the "filters" dict carefully constructed in parse_query
         if parsed_query.get("filters"):
             if parsed_query["filters"].get("region"):
                 filters.append({"region": {"$eq": parsed_query["filters"]["region"]}})
@@ -282,7 +362,7 @@ class QueryParser:
             if parsed_query["filters"].get("type"):
                 filters.append({"type": {"$eq": parsed_query["filters"]["type"]}})
 
-            # Ưu tiên lọc "location_specific" nếu có
+            # Prioritize filtering by "location_specific" if available
             if parsed_query["filters"].get("location_specific"):
                 filters.append(
                     {
@@ -291,7 +371,7 @@ class QueryParser:
                         }
                     }
                 )
-            # Nếu không có specific, mới lọc "location_city"
+            # If no specific location, then filter by "location_city"
             elif parsed_query["filters"].get("location_city"):
                 filters.append(
                     {"location_city": {"$eq": parsed_query["filters"]["location_city"]}}

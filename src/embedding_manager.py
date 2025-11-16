@@ -1,7 +1,6 @@
 import logging
 
-from langchain_community.embeddings import (HuggingFaceEmbeddings,
-                                            OllamaEmbeddings)
+from langchain_community.embeddings import HuggingFaceEmbeddings, OllamaEmbeddings
 
 from src.config import Config
 
