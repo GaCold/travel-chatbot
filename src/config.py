@@ -38,8 +38,8 @@ class Config:
     LOG_DIRECTORY = os.path.join(BASE_DIR, "logs")
 
     # RAG settings
-    CHUNK_SIZE = 1000
-    CHUNK_OVERLAP = 200
+    CHUNK_SIZE = 1024
+    CHUNK_OVERLAP = 100
     SEARCH_K = 5  # Number of documents retrieved per query
 
     # Chroma settings
